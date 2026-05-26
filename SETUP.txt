@@ -1,0 +1,198 @@
+================================================================================
+                    SETUP - INSTALACIÓN DEL PROYECTO
+================================================================================
+
+REQUISITOS PREVIOS
+================================================================================
+- Python 3.8 o superior
+  Descargar desde: https://www.python.org/downloads/
+  
+NOTA: Durante la instalación de Python, marcar "Add Python to PATH"
+
+
+PASOS PARA INSTALAR Y EJECUTAR
+================================================================================
+
+1. CLONAR O COPIAR EL PROYECTO
+   - Descargar/clonar el proyecto
+   - Abrir terminal en la carpeta del proyecto
+
+2. CREAR AMBIENTE VIRTUAL
+   Windows:
+   python -m venv venv
+   venv\Scripts\activate
+
+   Linux/Mac:
+   python3 -m venv venv
+   source venv/bin/activate
+
+3. INSTALAR DEPENDENCIAS
+   pip install -r requirements.txt
+
+4. CREAR ARCHIVO .env
+   - Crear archivo .env en la carpeta principal del proyecto
+   - Agregar las credenciales reales (ver paso 5)
+
+5. CONFIGURAR CREDENCIALES EN .env
+   
+   Crear el archivo .env con tus datos:
+   
+   # SQL Database
+   SQL_HOST=tu_host
+   SQL_PORT=5432
+   SQL_USER=tu_usuario
+   SQL_PASSWORD=tu_contraseña
+   SQL_DATABASE=tu_db
+   
+   # Redis
+   REDIS_HOST=tu_host
+   REDIS_PORT=6379
+   REDIS_PASSWORD=tu_contraseña (si aplica)
+   REDIS_DB=0
+   
+   # MongoDB
+   MONGODB_HOST=tu_host
+   MONGODB_PORT=27017
+   MONGODB_USER=tu_usuario (si aplica)
+   MONGODB_PASSWORD=tu_contraseña (si aplica)
+   MONGODB_DATABASE=tu_db
+   
+   # Neo4j
+   NEO4J_URI=neo4j+s://tu_id.databases.neo4j.io
+   NEO4J_USER=neo4j
+   NEO4J_PASSWORD=tu_contraseña
+   
+   # Cassandra
+   CASSANDRA_HOST=tu_host
+   CASSANDRA_PORT=9042
+   CASSANDRA_KEYSPACE=tu_keyspace
+   CASSANDRA_USER=tu_usuario (si aplica)
+   CASSANDRA_PASSWORD=tu_contraseña (si aplica)
+
+6. PROBAR CONEXIONES
+   python main.py
+   
+   Deberías ver algo como:
+   ✓ SQL conectado
+   ✓ Redis conectado
+   ✓ MongoDB conectado
+   ✓ Neo4j conectado
+   ✓ Cassandra conectado
+
+
+DEPENDENCIAS QUE SE INSTALAN
+================================================================================
+Los paquetes necesarios están en requirements.txt:
+
+- sqlalchemy==2.0.23          (SQL)
+- psycopg2-binary==2.9.9      (PostgreSQL)
+- redis==5.0.1                (Redis)
+- pymongo==4.6.0              (MongoDB)
+- neo4j==5.14.0               (Neo4j)
+- cassandra-driver==3.29.0    (Cassandra)
+- python-dotenv==1.0.0        (Variables de entorno)
+
+Se instalan automáticamente con: pip install -r requirements.txt
+
+
+USAR LAS BASES DE DATOS EN TU CÓDIGO
+================================================================================
+
+Importar y conectar:
+
+from src.databases import (
+    SQLDatabase, 
+    RedisDatabase, 
+    MongoDBDatabase, 
+    Neo4jDatabase, 
+    CassandraDatabase
+)
+
+# SQL
+sql = SQLDatabase()
+results = sql.execute_query("SELECT * FROM users")
+
+# Redis
+redis = RedisDatabase()
+redis.set("key", "value")
+value = redis.get("key")
+
+# MongoDB
+mongo = MongoDBDatabase()
+mongo.insert_one("users", {"name": "Juan"})
+
+# Neo4j
+neo4j = Neo4jDatabase()
+neo4j.create_node("User", {"id": "1", "name": "Juan"})
+
+# Cassandra
+cassandra = CassandraDatabase()
+cassandra.insert("users", {"id": 1, "name": "Juan"})
+
+
+ARCHIVOS IMPORTANTES
+================================================================================
+
+.env                 → TUS CREDENCIALES (NO COMMITEAR A GIT)
+requirements.txt     → Lista de dependencias
+main.py              → Script de prueba básico
+src/config/          → Configuración centralizada
+src/databases/       → Módulos de conexión a cada BD
+SETUP.txt            → Esta guía de instalación
+
+
+SOLUCIONAR PROBLEMAS COMUNES
+================================================================================
+
+❌ "Python no es reconocido"
+   → Reinstalar Python marcando "Add Python to PATH"
+   → O agregar Python manualmente al PATH
+
+❌ "ModuleNotFoundError"
+   → Asegurarse de estar en ambiente virtual activado
+   → Ejecutar: pip install -r requirements.txt
+
+❌ "No se puede conectar a base de datos"
+   → Verificar que las credenciales en .env sean correctas
+   → Verificar que el host sea accesible
+   → Revisar que la base de datos esté activa/en línea
+
+❌ "psycopg2 error"
+   → Está en requirements.txt (psycopg2-binary)
+   → Se instala automáticamente con pip install -r requirements.txt
+
+
+PRIMER EJECUCIÓN - CHECKLIST
+================================================================================
+
+☐ Python 3.8+ instalado
+☐ Proyecto descargado/clonado
+☐ Terminal abierta en carpeta del proyecto
+☐ Ambiente virtual creado: python -m venv venv
+☐ Ambiente virtual activado: venv\Scripts\activate (Windows)
+☐ Dependencias instaladas: pip install -r requirements.txt
+☐ Archivo .env creado con tus credenciales
+☐ Proyecto probado: python main.py
+
+
+¿DUDAS?
+================================================================================
+
+1. Verificar que Python esté instalado:
+   python --version
+
+2. Verificar que pip funcione:
+   pip --version
+
+3. Verificar credenciales:
+   Abrir .env y revisar que todos los datos sean correctos
+
+4. Revisar logs:
+   main.py mostrará errores si algo falla
+
+5. Probar conexión manual:
+   python
+   >>> from src.databases import Neo4jDatabase
+   >>> neo4j = Neo4jDatabase()
+   >>> print("Conectado") if neo4j.driver else print("Error")
+   >>> exit()
