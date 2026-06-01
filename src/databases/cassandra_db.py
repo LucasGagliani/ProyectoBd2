@@ -1,7 +1,9 @@
 """Cassandra Database connection module."""
 
-from cassandra.cluster import Cluster
-from cassandra.auth import PlainTextAuthProvider
+# Cluster y PlainTextAuthProvider se importan de forma lazy dentro de _connect()
+# porque cassandra-driver detecta el event loop al nivel de módulo.
+# En Python 3.12+ asyncore fue eliminado, así que hay que usar AsyncioConnection
+# y registrarlo ANTES de importar Cluster. El import lazy garantiza ese orden.
 from typing import Any, Optional, List, Dict
 from src.config import settings
 import logging
@@ -21,6 +23,12 @@ class CassandraDatabase:
     def _connect(self):
         """Establish Cassandra connection."""
         try:
+            # Import lazy: AsyncioConnection debe registrarse ANTES de Cluster
+            # para que cassandra-driver use asyncio en lugar del asyncore eliminado.
+            from cassandra.io.asyncioreactor import AsyncioConnection
+            from cassandra.cluster import Cluster
+            from cassandra.auth import PlainTextAuthProvider
+
             # Setup authentication if credentials provided
             auth_provider = None
             if settings.CASSANDRA_USER and settings.CASSANDRA_PASSWORD:
@@ -29,11 +37,12 @@ class CassandraDatabase:
                     password=settings.CASSANDRA_PASSWORD,
                 )
 
-            # Create cluster connection
+            # Create cluster connection usando AsyncioConnection explícitamente
             self.cluster = Cluster(
                 [settings.CASSANDRA_HOST],
                 port=settings.CASSANDRA_PORT,
                 auth_provider=auth_provider,
+                connection_class=AsyncioConnection,
             )
 
             self.session = self.cluster.connect(settings.CASSANDRA_KEYSPACE)

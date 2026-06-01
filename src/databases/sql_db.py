@@ -40,7 +40,18 @@ class SQLDatabase:
             else:
                 raise ValueError(f"Unsupported database type: {self.db_type}")
 
-            self.engine = create_engine(connection_string, echo=False)
+            # SSL requerido para providers cloud como Neon
+            connect_args = {}
+            if settings.SQL_SSLMODE:
+                connect_args["sslmode"] = settings.SQL_SSLMODE
+
+            self.engine = create_engine(
+                connection_string,
+                echo=False,
+                connect_args=connect_args,
+                pool_pre_ping=True,   # reconecta automáticamente si Neon cerró la conexión
+                pool_recycle=300,     # recicla conexiones cada 5 min para evitar timeouts
+            )
             self.SessionLocal = sessionmaker(
                 autocommit=False, autoflush=False, bind=self.engine
             )

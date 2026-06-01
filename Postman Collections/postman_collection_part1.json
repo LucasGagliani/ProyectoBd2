@@ -1,0 +1,517 @@
+{
+  "info": {
+    "name": "Uber TPO — Parte 1",
+    "description": "Tests para auth, usuarios y conductores. Importar en Postman y configurar la variable {{base_url}} = http://localhost:8000",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000", "type": "string" },
+    { "key": "token", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "🟢 Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/", "host": ["{{base_url}}"], "path": [""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('App OK', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.status).to.eql('ok');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🔐 Auth",
+      "item": [
+        {
+          "name": "Registrar Usuario (pasajero)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/auth/register/usuario", "host": ["{{base_url}}"], "path": ["auth", "register", "usuario"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Juan Perez\",\n  \"email\": \"juan@gmail.com\",\n  \"telefono\": \"1122334455\",\n  \"contrasena\": \"pass123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 - Creado', () => pm.response.to.have.status(201));",
+                  "pm.test('Tiene id_usuario', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id_usuario');",
+                  "    pm.expect(body.email).to.eql('juan@gmail.com');",
+                  "    pm.expect(body).to.not.have.property('contrasena');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar Usuario — email duplicado (debe fallar)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/auth/register/usuario", "host": ["{{base_url}}"], "path": ["auth", "register", "usuario"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Otro Juan\",\n  \"email\": \"juan@gmail.com\",\n  \"telefono\": \"9999999999\",\n  \"contrasena\": \"pass123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 409 - Conflicto', () => pm.response.to.have.status(409));",
+                  "pm.test('Mensaje de error claro', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.detail).to.include('email');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar Usuario — contraseña corta (debe fallar)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/auth/register/usuario", "host": ["{{base_url}}"], "path": ["auth", "register", "usuario"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Test\",\n  \"email\": \"test@gmail.com\",\n  \"telefono\": \"1111111111\",\n  \"contrasena\": \"abc\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422 - Validación fallida', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar Conductor",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/auth/register/conductor", "host": ["{{base_url}}"], "path": ["auth", "register", "conductor"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Carlos Lopez\",\n  \"email\": \"carlos@gmail.com\",\n  \"telefono\": \"1566778899\",\n  \"contrasena\": \"pass456\",\n  \"nro_licencia\": \"LIC-00123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 - Creado', () => pm.response.to.have.status(201));",
+                  "pm.test('Tiene id_conductor e id_usuario', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id_conductor');",
+                  "    pm.expect(body).to.have.property('id_usuario');",
+                  "    pm.expect(body.nro_licencia).to.eql('LIC-00123');",
+                  "    pm.expect(body.estado).to.eql('disponible');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar Conductor — licencia duplicada (debe fallar)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/auth/register/conductor", "host": ["{{base_url}}"], "path": ["auth", "register", "conductor"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Otro Conductor\",\n  \"email\": \"otro@gmail.com\",\n  \"telefono\": \"1500000000\",\n  \"contrasena\": \"pass789\",\n  \"nro_licencia\": \"LIC-00123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 409 - Conflicto', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login — Usuario",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"juan@gmail.com\",\n  \"contrasena\": \"pass123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Retorna token y rol usuario', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('access_token');",
+                  "    pm.expect(body.token_type).to.eql('bearer');",
+                  "    pm.expect(body.role).to.eql('usuario');",
+                  "    pm.collectionVariables.set('token', body.access_token);",
+                  "    console.log('Token guardado:', body.access_token.substring(0,20) + '...');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login — Conductor",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"carlos@gmail.com\",\n  \"contrasena\": \"pass456\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Retorna rol conductor', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.role).to.eql('conductor');",
+                  "    pm.collectionVariables.set('token', body.access_token);",
+                  "    console.log('Token conductor guardado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login — credenciales incorrectas (debe fallar)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"juan@gmail.com\",\n  \"contrasena\": \"wrongpassword\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401 - No autorizado', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/auth/logout", "host": ["{{base_url}}"], "path": ["auth", "logout"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204 - Sin contenido', () => pm.response.to.have.status(204));",
+                  "pm.collectionVariables.set('token', '');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "👤 Usuarios",
+      "item": [
+        {
+          "name": "Ver mi perfil (usuario)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/users/me", "host": ["{{base_url}}"], "path": ["users", "me"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Campos correctos', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id_usuario');",
+                  "    pm.expect(body).to.have.property('nombre');",
+                  "    pm.expect(body).to.have.property('email');",
+                  "    pm.expect(body).to.not.have.property('contrasena');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver mi perfil — sin token (debe fallar)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/users/me", "host": ["{{base_url}}"], "path": ["users", "me"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401 - No autorizado', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Actualizar mi perfil",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/users/me", "host": ["{{base_url}}"], "path": ["users", "me"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Juan Perez Actualizado\",\n  \"telefono\": \"1199887766\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Nombre actualizado', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.nombre).to.eql('Juan Perez Actualizado');",
+                  "    pm.expect(body.telefono).to.eql('1199887766');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🚗 Conductores",
+      "item": [
+        {
+          "name": "Ver mi perfil (conductor) — loguearse primero con Login Conductor",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/drivers/me", "host": ["{{base_url}}"], "path": ["drivers", "me"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Campos completos del conductor', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id_conductor');",
+                  "    pm.expect(body).to.have.property('id_usuario');",
+                  "    pm.expect(body).to.have.property('nro_licencia');",
+                  "    pm.expect(body).to.have.property('nombre');",
+                  "    pm.expect(body).to.have.property('email');",
+                  "    pm.expect(body.estado).to.eql('disponible');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver perfil conductor con token de usuario (debe fallar)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/drivers/me", "host": ["{{base_url}}"], "path": ["drivers", "me"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 403 - Forbidden', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Actualizar perfil conductor",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/drivers/me", "host": ["{{base_url}}"], "path": ["drivers", "me"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nro_licencia\": \"LIC-99999\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Licencia actualizada', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.nro_licencia).to.eql('LIC-99999');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambiar estado a ocupado",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/drivers/me/estado", "host": ["{{base_url}}"], "path": ["drivers", "me", "estado"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"ocupado\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Estado actualizado', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.estado).to.eql('ocupado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambiar estado a disponible",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/drivers/me/estado", "host": ["{{base_url}}"], "path": ["drivers", "me", "estado"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"disponible\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Estado actualizado', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.estado).to.eql('disponible');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambiar estado — valor inválido (debe fallar)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/drivers/me/estado", "host": ["{{base_url}}"], "path": ["drivers", "me", "estado"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"volando\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422 - Validación fallida', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
