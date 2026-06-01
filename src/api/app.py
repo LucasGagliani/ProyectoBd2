@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from src.api.routers import auth, users, drivers
+from src.api.routers import auth, users, drivers, trips, payments
 from src.databases.connections import get_sql
 from src.databases.schema import Base
 
@@ -57,6 +57,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(auth.router, prefix="/auth", tags=["Autenticación"])
 app.include_router(users.router, prefix="/users", tags=["Usuarios"])
 app.include_router(drivers.router, prefix="/drivers", tags=["Conductores"])
+app.include_router(trips.router, prefix="/trips", tags=["Viajes"])
+app.include_router(payments.router, prefix="/payments", tags=["Pagos"])
 
 
 @app.get("/", tags=["Health"])
