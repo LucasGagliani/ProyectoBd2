@@ -5,7 +5,7 @@ Centralizes all database connection settings using environment variables.
 
 import os
 from dotenv import load_dotenv
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 # Load environment variables from .env file
 load_dotenv()
@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     SQL_USER: str = os.getenv("SQL_USER", "postgres")
     SQL_PASSWORD: str = os.getenv("SQL_PASSWORD", "password")
     SQL_DATABASE: str = os.getenv("SQL_DATABASE", "mydb")
+    SQL_SSLMODE: str = os.getenv("SQL_SSLMODE", "")
 
     # Redis Configuration
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
@@ -49,9 +50,12 @@ class Settings(BaseSettings):
     CASSANDRA_USER: str = os.getenv("CASSANDRA_USER", "")
     CASSANDRA_PASSWORD: str = os.getenv("CASSANDRA_PASSWORD", "")
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    # JWT Configuration
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "changeme-secret-key")
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+    JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "480"))  # 8 horas
+
+    model_config = {"env_file": ".env", "case_sensitive": True}
 
 
 # Global settings instance
