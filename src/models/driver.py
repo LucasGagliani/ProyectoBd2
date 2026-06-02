@@ -71,3 +71,68 @@ class DriverWithUserResponse(BaseModel):
     calificacion_promedio: Optional[Decimal] = None
     latitud_actual: Optional[Decimal] = None
     longitud_actual: Optional[Decimal] = None
+
+
+class DriverVehicleCreate(BaseModel):
+    """Schema para crear un vehículo."""
+    marca: str
+    modelo: str
+    anio: int
+    nro_placa: str
+    color: Optional[str] = None
+    tipo_vehiculo: Optional[str] = None
+    capacidad_pasajeros: Optional[int] = None
+
+    @field_validator("marca", "modelo")
+    @classmethod
+    def campos_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("El campo no puede estar vacío")
+        return v.strip()
+
+    @field_validator("nro_placa")
+    @classmethod
+    def placa_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("La placa no puede estar vacía")
+        return v.strip().upper()
+
+    @field_validator("anio")
+    @classmethod
+    def anio_valido(cls, v: int) -> int:
+        if v < 1900 or v > 2100:
+            raise ValueError("El año debe ser realista (1900-2100)")
+        return v
+
+
+class DriverVehicleUpdate(BaseModel):
+    """Schema para actualizar un vehículo."""
+    marca: Optional[str] = None
+    modelo: Optional[str] = None
+    anio: Optional[int] = None
+    nro_placa: Optional[str] = None
+    color: Optional[str] = None
+    tipo_vehiculo: Optional[str] = None
+    capacidad_pasajeros: Optional[int] = None
+
+    @field_validator("nro_placa")
+    @classmethod
+    def placa_uppercase(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            return v.strip().upper()
+        return v
+
+
+class DriverVehicleResponse(BaseModel):
+    """Schema para responder datos del vehículo."""
+    id_vehiculo: int
+    id_conductor: int
+    marca: str
+    modelo: str
+    anio: int
+    nro_placa: str
+    color: Optional[str] = None
+    tipo_vehiculo: Optional[str] = None
+    capacidad_pasajeros: Optional[int] = None
+
+    model_config = {"from_attributes": True}
