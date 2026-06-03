@@ -2,20 +2,27 @@
 Router de conductores.
 
 Endpoints:
-  GET   /drivers/me         — perfil completo del conductor autenticado
-  PUT   /drivers/me         — actualizar nro_licencia
-  PATCH /drivers/me/estado  — cambiar estado (disponible / ocupado / inactivo)
+  GET   /drivers/me                      — perfil completo del conductor autenticado
+  PUT   /drivers/me                      — actualizar nro_licencia
+  PATCH /drivers/me/estado               — cambiar estado (disponible / ocupado / inactivo)
+  GET   /drivers/me/vehicles             — listar vehículos del conductor
+  POST  /drivers/me/vehicles             — crear vehículo
+  PUT   /drivers/me/vehicles/{id}        — actualizar vehículo
+  DELETE /drivers/me/vehicles/{id}       — eliminar vehículo
 """
 
 import logging
-from typing import Annotated
+from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_db, get_current_user, get_current_conductor
-from src.databases.schema import Usuario, Conductor
-from src.models.driver import DriverResponse, DriverUpdate, DriverStatusUpdate, DriverWithUserResponse
+from src.databases.schema import Usuario, Conductor, Vehiculo
+from src.models.driver import (
+    DriverResponse, DriverUpdate, DriverStatusUpdate, DriverWithUserResponse,
+    DriverVehicleCreate, DriverVehicleUpdate, DriverVehicleResponse
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -108,3 +115,169 @@ def update_driver_status(
 
     logger.info(f"Estado conductor actualizado: id={conductor.id_conductor} -> {data.estado}")
     return conductor
+
+
+# ==================== VEHÍCULOS ====================
+
+@router.get(
+    "/me/vehicles",
+    response_model=List[DriverVehicleResponse],
+    summary="Listar mis vehículos",
+)
+def get_my_vehicles(
+    conductor: Annotated[Conductor, Depends(get_current_conductor)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Retorna lista de vehículos del conductor autenticado."""
+    vehicles = (
+        db.query(Vehiculo)
+        .filter(Vehiculo.id_conductor == conductor.id_conductor)
+        .all()
+    )
+    return vehicles
+
+
+@router.post(
+    "/me/vehicles",
+    response_model=DriverVehicleResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear nuevo vehículo",
+)
+def create_vehicle(
+    data: DriverVehicleCreate,
+    conductor: Annotated[Conductor, Depends(get_current_conductor)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """
+    Crea un nuevo vehículo para el conductor autenticado.
+    La placa debe ser única en el sistema.
+    """
+    # Verificar que la placa no esté en uso
+    existing_placa = (
+        db.query(Vehiculo)
+        .filter(Vehiculo.nro_placa == data.nro_placa)
+        .first()
+    )
+    if existing_placa:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La placa ya está registrada en el sistema",
+        )
+
+    vehicle = Vehiculo(
+        id_conductor=conductor.id_conductor,
+        marca=data.marca,
+        modelo=data.modelo,
+        anio=data.anio,
+        nro_placa=data.nro_placa,
+        color=data.color,
+        tipo_vehiculo=data.tipo_vehiculo,
+        capacidad_pasajeros=data.capacidad_pasajeros,
+    )
+    db.add(vehicle)
+    db.commit()
+    db.refresh(vehicle)
+
+    logger.info(f"Vehículo creado: id={vehicle.id_vehiculo}, conductor={conductor.id_conductor}")
+    return vehicle
+
+
+@router.put(
+    "/me/vehicles/{vehicle_id}",
+    response_model=DriverVehicleResponse,
+    summary="Actualizar vehículo",
+)
+def update_vehicle(
+    vehicle_id: int,
+    data: DriverVehicleUpdate,
+    conductor: Annotated[Conductor, Depends(get_current_conductor)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """
+    Actualiza datos del vehículo.
+    Solo el conductor dueño del vehículo puede actualizarlo.
+    """
+    vehicle = db.get(Vehiculo, vehicle_id)
+    if vehicle is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vehículo no encontrado",
+        )
+
+    if vehicle.id_conductor != conductor.id_conductor:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para actualizar este vehículo",
+        )
+
+    # Validar que la nueva placa no esté en uso (si se intenta cambiar)
+    if data.nro_placa is not None and data.nro_placa != vehicle.nro_placa:
+        existing_placa = (
+            db.query(Vehiculo)
+            .filter(
+                Vehiculo.nro_placa == data.nro_placa,
+                Vehiculo.id_vehiculo != vehicle_id,
+            )
+            .first()
+        )
+        if existing_placa:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="La nueva placa ya está registrada en el sistema",
+            )
+
+    # Actualizar solo los campos no nulos
+    if data.marca is not None:
+        vehicle.marca = data.marca
+    if data.modelo is not None:
+        vehicle.modelo = data.modelo
+    if data.anio is not None:
+        vehicle.anio = data.anio
+    if data.nro_placa is not None:
+        vehicle.nro_placa = data.nro_placa
+    if data.color is not None:
+        vehicle.color = data.color
+    if data.tipo_vehiculo is not None:
+        vehicle.tipo_vehiculo = data.tipo_vehiculo
+    if data.capacidad_pasajeros is not None:
+        vehicle.capacidad_pasajeros = data.capacidad_pasajeros
+
+    db.commit()
+    db.refresh(vehicle)
+
+    logger.info(f"Vehículo actualizado: id={vehicle.id_vehiculo}")
+    return vehicle
+
+
+@router.delete(
+    "/me/vehicles/{vehicle_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Eliminar vehículo",
+)
+def delete_vehicle(
+    vehicle_id: int,
+    conductor: Annotated[Conductor, Depends(get_current_conductor)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """
+    Elimina un vehículo.
+    Solo el conductor dueño del vehículo puede eliminarlo.
+    """
+    vehicle = db.get(Vehiculo, vehicle_id)
+    if vehicle is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vehículo no encontrado",
+        )
+
+    if vehicle.id_conductor != conductor.id_conductor:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para eliminar este vehículo",
+        )
+
+    db.delete(vehicle)
+    db.commit()
+
+    logger.info(f"Vehículo eliminado: id={vehicle.id_vehiculo}")
+

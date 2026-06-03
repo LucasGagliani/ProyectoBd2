@@ -120,3 +120,17 @@ class Resena(Base):
     viaje = relationship("Viaje", back_populates="resenas")
     autor = relationship("Usuario", foreign_keys=[id_autor])
     receptor = relationship("Usuario", foreign_keys=[id_receptor])
+
+
+class UbicacionViaje(Base):
+    __tablename__ = "ubicaciones_viaje"
+
+    id_ubicacion = Column(Integer, primary_key=True, autoincrement=True)
+    id_viaje = Column(Integer, ForeignKey("viajes.id_viaje"), nullable=False)
+    id_conductor = Column(Integer, ForeignKey("conductores.id_conductor"), nullable=False)
+    latitud = Column(DECIMAL(10, 7), nullable=False)
+    longitud = Column(DECIMAL(10, 7), nullable=False)
+    timestamp = Column(TIMESTAMP, server_default=func.now())
+
+    viaje = relationship("Viaje", foreign_keys=[id_viaje])
+    conductor = relationship("Conductor", foreign_keys=[id_conductor])
