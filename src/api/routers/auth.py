@@ -15,12 +15,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from src.api.dependencies import get_db, get_redis_client, oauth2_scheme
+from src.api.dependencies import get_db, get_redis_client, get_neo4j_client, oauth2_scheme
 from src.databases.schema import Usuario, Conductor
 from src.models.user import UserCreate, UserResponse
 from src.models.driver import DriverCreate, DriverResponse
 from src.models.auth import LoginRequest, TokenResponse
 from src.services import auth_service
+from src.services.neo4j_service import sync_usuario_node, sync_conductor_node
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -39,6 +40,7 @@ router = APIRouter()
 def register_usuario(
     data: UserCreate,
     db: Annotated[Session, Depends(get_db)],
+    neo4j=Depends(get_neo4j_client),
 ):
     """
     Registra un nuevo pasajero.
@@ -71,6 +73,9 @@ def register_usuario(
             detail="El email ya está registrado",
         )
 
+    # Sincronizar nodo en el grafo Neo4j para futuros matchings
+    sync_usuario_node(neo4j, nuevo_usuario.id_usuario, nuevo_usuario.nombre)
+
     logger.info(f"Nuevo usuario registrado: id={nuevo_usuario.id_usuario}")
     return nuevo_usuario
 
@@ -88,6 +93,7 @@ def register_usuario(
 def register_conductor(
     data: DriverCreate,
     db: Annotated[Session, Depends(get_db)],
+    neo4j=Depends(get_neo4j_client),
 ):
     """
     Registra un conductor: crea primero el usuario base y luego el conductor.
@@ -133,6 +139,10 @@ def register_conductor(
             status_code=status.HTTP_409_CONFLICT,
             detail="Error de unicidad: email o licencia ya registrados",
         )
+
+    # Sincronizar nodos en Neo4j: el conductor tiene nodo de Usuario + nodo de Conductor
+    sync_usuario_node(neo4j, nuevo_usuario.id_usuario, nuevo_usuario.nombre)
+    sync_conductor_node(neo4j, nuevo_conductor.id_conductor, nuevo_usuario.nombre)
 
     logger.info(f"Nuevo conductor registrado: id={nuevo_conductor.id_conductor}")
     return nuevo_conductor

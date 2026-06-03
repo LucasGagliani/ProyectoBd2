@@ -122,31 +122,64 @@ def find_nearest_driver(
     usuario_lon: float,
 ) -> Optional[Conductor]:
     """
-    Encuentra el conductor disponible más cercano al usuario.
-    Usa posición actual del conductor de Redis (latitud_actual, longitud_actual en Conductor).
+    Encuentra el conductor disponible más cercano al usuario
+    usando su latitud_actual / longitud_actual.
     """
     if not available_drivers:
         return None
-    
+
     nearest_driver = None
     min_distance = float("inf")
-    
+
     for driver in available_drivers:
-        # Obtener posición actual del conductor
         lat = driver.latitud_actual
         lon = driver.longitud_actual
-        
         if lat is None or lon is None:
             continue
-        
-        # Calcular distancia
-        distance = _calculate_distance(usuario_lat, usuario_lon, lat, lon)
-        
+        distance = _calculate_distance(usuario_lat, usuario_lon, float(lat), float(lon))
         if distance < min_distance:
             min_distance = distance
             nearest_driver = driver
-    
+
     return nearest_driver
+
+
+def find_best_driver(
+    db: Session,
+    redis_client,
+    neo4j_client,
+    available_drivers: List[Conductor],
+    usuario_id: int,
+    usuario_lat: float,
+    usuario_lon: float,
+) -> Optional[Conductor]:
+    """
+    Estrategia de matching en dos pasos:
+
+    1. Neo4j — matching preferencial:
+       Busca en el grafo de relaciones conductores con los que el usuario
+       ya viajó antes y que estén disponibles ahora.
+       Si hay historial, prioriza al conductor con más viajes previos
+       (siempre que tenga posición registrada).
+
+    2. Fallback — matching por posición:
+       Si Neo4j no está disponible o el usuario no tiene historial,
+       asigna el conductor disponible más cercano geográficamente.
+    """
+    from src.services.neo4j_service import find_preferred_conductors
+
+    available_ids = [d.id_conductor for d in available_drivers]
+
+    # Paso 1: buscar conductores con historial en Neo4j
+    preferred_ids = find_preferred_conductors(neo4j_client, usuario_id, available_ids)
+    if preferred_ids:
+        for cid in preferred_ids:
+            conductor = next((d for d in available_drivers if d.id_conductor == cid), None)
+            if conductor and conductor.latitud_actual is not None:
+                return conductor
+
+    # Paso 2: fallback al más cercano por posición
+    return find_nearest_driver(db, redis_client, available_drivers, usuario_lat, usuario_lon)
 
 
 def assign_trip_to_driver(
