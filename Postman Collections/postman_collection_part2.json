@@ -1,0 +1,477 @@
+{
+  "info": {
+    "name": "Uber TPO — Parte 2 (Vehículos y Viajes)",
+    "description": "RF-02: CRUD vehículos del conductor. RF-03: Solicitud y asignación automática de viajes.\n\nPREREQUISITOS:\n1. Tener la app corriendo (python main.py)\n2. Correr primero Login Conductor para poblar {{token}} con un token de conductor\n3. Correr Login Usuario para testear endpoints de pasajero\n\nNOTA: Para testear asignación automática el conductor debe tener latitud_actual y longitud_actual seteadas en la DB.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "vehicle_id", "value": "", "type": "string" },
+    { "key": "trip_id", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "🔑 Setup — Login (correr antes de todo)",
+      "item": [
+        {
+          "name": "Login Conductor (guarda token)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"carlos@gmail.com\",\n  \"contrasena\": \"pass456\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Rol conductor y token guardado', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.role).to.eql('conductor');",
+                  "    pm.collectionVariables.set('token', body.access_token);",
+                  "    console.log('Token conductor listo');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login Usuario (guarda token)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"juan@gmail.com\",\n  \"contrasena\": \"pass123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Rol usuario y token guardado', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.role).to.eql('usuario');",
+                  "    pm.collectionVariables.set('token', body.access_token);",
+                  "    console.log('Token usuario listo');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🚗 RF-02 — Vehículos del Conductor",
+      "item": [
+        {
+          "name": "Listar mis vehículos (vacío al inicio)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/drivers/me/vehicles", "host": ["{{base_url}}"], "path": ["drivers", "me", "vehicles"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Respuesta es array', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear vehículo",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/drivers/me/vehicles", "host": ["{{base_url}}"], "path": ["drivers", "me", "vehicles"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"marca\": \"Toyota\",\n  \"modelo\": \"Corolla\",\n  \"anio\": 2022,\n  \"nro_placa\": \"ABC123\",\n  \"color\": \"Blanco\",\n  \"tipo_vehiculo\": \"sedan\",\n  \"capacidad_pasajeros\": 4\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 - Creado', () => pm.response.to.have.status(201));",
+                  "pm.test('Vehículo creado con todos los campos', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id_vehiculo');",
+                  "    pm.expect(body.marca).to.eql('Toyota');",
+                  "    pm.expect(body.modelo).to.eql('Corolla');",
+                  "    pm.expect(body.nro_placa).to.eql('ABC123');",
+                  "    pm.collectionVariables.set('vehicle_id', body.id_vehiculo);",
+                  "    console.log('vehicle_id guardado:', body.id_vehiculo);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear vehículo — placa duplicada (debe fallar)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/drivers/me/vehicles", "host": ["{{base_url}}"], "path": ["drivers", "me", "vehicles"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"marca\": \"Ford\",\n  \"modelo\": \"Focus\",\n  \"anio\": 2020,\n  \"nro_placa\": \"ABC123\",\n  \"color\": \"Negro\",\n  \"tipo_vehiculo\": \"sedan\",\n  \"capacidad_pasajeros\": 4\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 409 - Conflicto por placa duplicada', () => pm.response.to.have.status(409));",
+                  "pm.test('Mensaje de error claro', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.detail).to.include('placa');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear vehículo — token de usuario (debe fallar)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/drivers/me/vehicles", "host": ["{{base_url}}"], "path": ["drivers", "me", "vehicles"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"marca\": \"Honda\",\n  \"modelo\": \"Civic\",\n  \"anio\": 2021,\n  \"nro_placa\": \"ZZZ999\",\n  \"color\": \"Rojo\",\n  \"tipo_vehiculo\": \"sedan\",\n  \"capacidad_pasajeros\": 4\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 403 - Solo conductores pueden crear vehículos', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar vehículos (con el creado)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/drivers/me/vehicles", "host": ["{{base_url}}"], "path": ["drivers", "me", "vehicles"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Lista tiene al menos un vehículo', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.be.an('array');",
+                  "    pm.expect(body.length).to.be.at.least(1);",
+                  "    pm.expect(body[0]).to.have.property('id_vehiculo');",
+                  "    pm.expect(body[0]).to.have.property('nro_placa');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Actualizar vehículo",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/drivers/me/vehicles/{{vehicle_id}}", "host": ["{{base_url}}"], "path": ["drivers", "me", "vehicles", "{{vehicle_id}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"color\": \"Gris\",\n  \"capacidad_pasajeros\": 5\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Campos actualizados', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.color).to.eql('Gris');",
+                  "    pm.expect(body.capacidad_pasajeros).to.eql(5);",
+                  "    pm.expect(body.marca).to.eql('Toyota');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Actualizar vehículo — ID inexistente (debe fallar)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/drivers/me/vehicles/99999", "host": ["{{base_url}}"], "path": ["drivers", "me", "vehicles", "99999"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"color\": \"Azul\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404 - Vehículo no encontrado', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar vehículo",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/drivers/me/vehicles/{{vehicle_id}}", "host": ["{{base_url}}"], "path": ["drivers", "me", "vehicles", "{{vehicle_id}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204 - Sin contenido', () => pm.response.to.have.status(204));",
+                  "pm.collectionVariables.set('vehicle_id', '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar vehículos (vacío tras eliminar)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/drivers/me/vehicles", "host": ["{{base_url}}"], "path": ["drivers", "me", "vehicles"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Lista vacía tras eliminar', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.be.an('array');",
+                  "    pm.expect(body.length).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🗺️ RF-03 — Solicitud y Asignación de Viajes",
+      "item": [
+        {
+          "name": "Crear viaje — como usuario (asignación automática)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/trips", "host": ["{{base_url}}"], "path": ["trips"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitud_inicio\": -34.6037,\n  \"longitud_inicio\": -58.3816,\n  \"latitud_destino\": -34.6158,\n  \"longitud_destino\": -58.4333,\n  \"distancia_km\": 5.2,\n  \"tiempo_minutos\": 15\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 - Viaje creado', () => pm.response.to.have.status(201));",
+                  "pm.test('Campos correctos del viaje', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id_viaje');",
+                  "    pm.expect(body).to.have.property('estado');",
+                  "    pm.expect(['pendiente', 'aceptado']).to.include(body.estado);",
+                  "    pm.collectionVariables.set('trip_id', body.id_viaje);",
+                  "    console.log('trip_id guardado:', body.id_viaje, '| estado:', body.estado);",
+                  "    if (body.id_conductor) {",
+                  "        console.log('Conductor asignado automáticamente: id=' + body.id_conductor);",
+                  "    } else {",
+                  "        console.log('Sin conductor disponible, estado: pendiente');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear viaje — coordenadas fuera de rango (debe fallar)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/trips", "host": ["{{base_url}}"], "path": ["trips"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitud_inicio\": 999,\n  \"longitud_inicio\": -58.3816,\n  \"latitud_destino\": -34.6158,\n  \"longitud_destino\": -58.4333\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 422 - Coordenada inválida', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear viaje — sin token (debe fallar)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/trips", "host": ["{{base_url}}"], "path": ["trips"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitud_inicio\": -34.6037,\n  \"longitud_inicio\": -58.3816,\n  \"latitud_destino\": -34.6158,\n  \"longitud_destino\": -58.4333\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401 - No autorizado', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver detalles del viaje",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/trips/{{trip_id}}", "host": ["{{base_url}}"], "path": ["trips", "{{trip_id}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Datos completos del viaje', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id_viaje');",
+                  "    pm.expect(body).to.have.property('id_usuario');",
+                  "    pm.expect(body).to.have.property('estado');",
+                  "    pm.expect(body).to.have.property('latitud_inicio');",
+                  "    pm.expect(body).to.have.property('latitud_destino');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver detalles — viaje de otro usuario (debe fallar)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/trips/99999", "host": ["{{base_url}}"], "path": ["trips", "99999"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404 - Viaje no encontrado', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancelar viaje (usuario cancela su viaje pendiente)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/trips/{{trip_id}}/status", "host": ["{{base_url}}"], "path": ["trips", "{{trip_id}}", "status"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"cancelado\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Estado cancelado', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.estado).to.eql('cancelado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

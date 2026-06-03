@@ -35,6 +35,15 @@ def get_redis_client():
     return get_redis().client
 
 
+def get_neo4j_client():
+    """
+    Dependency que provee la instancia Neo4jDatabase.
+    Retorna None si Neo4j no está disponible — los servicios deben manejarlo con graceful degradation.
+    """
+    from src.databases.connections import get_neo4j
+    return get_neo4j()
+
+
 # -------------------------------------------------------------------
 # Dependencia principal de autenticación
 # -------------------------------------------------------------------

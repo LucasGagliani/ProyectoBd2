@@ -40,7 +40,7 @@ def create_payment(
     if viaje is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado")
 
-    _authorize_payment_access(current_user, viaje)
+    _authorize_payment_access(current_user, db, viaje)
 
     if viaje.estado != "finalizado":
         raise HTTPException(

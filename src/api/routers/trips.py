@@ -7,10 +7,11 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from src.api.dependencies import get_current_user, get_db, get_redis_client
+from src.api.dependencies import get_current_user, get_db, get_redis_client, get_neo4j_client
 from src.databases.schema import Conductor, Viaje
 from src.models.trip import TripFareResponse, TripStatusResponse, TripStatusUpdate, TripCreate, TripResponse
 from src.services import trip_service
+from src.services.neo4j_service import register_trip_relationship
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -44,6 +45,7 @@ def create_trip(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
     redis=Depends(get_redis_client),
+    neo4j=Depends(get_neo4j_client),
 ):
     """
     Crea una nueva solicitud de viaje y asigna automáticamente el conductor más cercano.
@@ -72,33 +74,33 @@ def create_trip(
     db.add(viaje)
     db.flush()  # Obtener el ID del viaje sin hacer commit aún
     
-    # Buscar conductor disponible
+    # Buscar conductor disponible usando matching en dos pasos:
+    # 1. Neo4j: prioriza conductores con historial con este usuario
+    # 2. Fallback: conductor disponible más cercano por posición GPS
     available_drivers = trip_service.find_available_drivers(db)
-    
+
     if available_drivers:
-        # Encontrar el más cercano
-        nearest_driver = trip_service.find_nearest_driver(
-            db,
-            redis,
-            available_drivers,
-            float(data.latitud_inicio),
-            float(data.longitud_inicio),
+        best_driver = trip_service.find_best_driver(
+            db=db,
+            redis_client=redis,
+            neo4j_client=neo4j,
+            available_drivers=available_drivers,
+            usuario_id=current_user.id_usuario,
+            usuario_lat=float(data.latitud_inicio),
+            usuario_lon=float(data.longitud_inicio),
         )
-        
-        if nearest_driver:
-            # Asignar viaje al conductor
-            trip_service.assign_trip_to_driver(db, viaje, nearest_driver)
-            logger.info(
-                f"Viaje {viaje.id_viaje} creado y asignado a conductor {nearest_driver.id_conductor}"
-            )
+
+        if best_driver:
+            trip_service.assign_trip_to_driver(db, viaje, best_driver)
+            # Registrar relación en el grafo Neo4j para futuros matchings
+            register_trip_relationship(neo4j, current_user.id_usuario, best_driver.id_conductor, viaje.id_viaje)
+            logger.info(f"Viaje {viaje.id_viaje} asignado a conductor {best_driver.id_conductor}")
         else:
-            # No hay conductor con posición válida, dejar en pendiente
             db.commit()
-            logger.info(f"Viaje {viaje.id_viaje} creado sin asignación (sin posición de conductores)")
+            logger.info(f"Viaje {viaje.id_viaje} sin asignación (conductores sin posición registrada)")
     else:
-        # No hay conductores disponibles, dejar en pendiente
         db.commit()
-        logger.info(f"Viaje {viaje.id_viaje} creado sin asignación (sin conductores disponibles)")
+        logger.info(f"Viaje {viaje.id_viaje} sin asignación (sin conductores disponibles)")
     
     db.refresh(viaje)
     return TripResponse(

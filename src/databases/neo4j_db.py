@@ -51,9 +51,9 @@ class Neo4jDatabase:
         try:
             with self.driver.session() as session:
                 if mode == "w":
-                    result = session.write_transaction(lambda tx: tx.run(query, parameters or {}).data())
+                    result = session.execute_write(lambda tx: tx.run(query, parameters or {}).data())
                 else:
-                    result = session.read_transaction(lambda tx: tx.run(query, parameters or {}).data())
+                    result = session.execute_read(lambda tx: tx.run(query, parameters or {}).data())
                 return result if result else []
         except Exception as e:
             logger.error(f"Error executing query: {e}")
