@@ -117,6 +117,32 @@ def update_driver_status(
     return conductor
 
 
+# ==================== UBICACIÓN ====================
+
+@router.patch(
+    "/me/location",
+    response_model=DriverResponse,
+    summary="Actualizar posición GPS del conductor",
+)
+def update_driver_location(
+    data: dict,
+    conductor: Annotated[Conductor, Depends(get_current_conductor)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Actualiza la posición actual del conductor para el sistema de matching."""
+    lat = data.get("latitud")
+    lon = data.get("longitud")
+    if lat is None or lon is None:
+        from fastapi import HTTPException, status
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Se requieren latitud y longitud")
+    conductor.latitud_actual = lat
+    conductor.longitud_actual = lon
+    db.commit()
+    db.refresh(conductor)
+    logger.info(f"Ubicación conductor actualizada: id={conductor.id_conductor} -> ({lat}, {lon})")
+    return conductor
+
+
 # ==================== VEHÍCULOS ====================
 
 @router.get(

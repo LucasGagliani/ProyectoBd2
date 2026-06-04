@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user, get_db, get_redis_client, get_neo4j_client
 from src.databases.schema import Conductor, Viaje
+from typing import List
 from src.models.trip import TripFareResponse, TripStatusResponse, TripStatusUpdate, TripCreate, TripResponse
 from src.services import trip_service
 from src.services.neo4j_service import register_trip_relationship
@@ -30,6 +31,63 @@ def _authorize_trip_access(current_user, conductor, viaje: Viaje) -> None:
         status_code=status.HTTP_403_FORBIDDEN,
         detail="No tenés permisos para ver o modificar este viaje.",
     )
+
+
+# ==================== LISTAR MIS VIAJES ====================
+
+@router.get(
+    "/my",
+    response_model=List[TripResponse],
+    summary="Ver mis viajes",
+)
+def get_my_trips(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Retorna los viajes activos del usuario autenticado.
+    - Si es pasajero: sus propios viajes
+    - Si es conductor: los viajes asignados a él
+    """
+    conductor = _load_conductor(db, current_user)
+
+    if conductor:
+        viajes = (
+            db.query(Viaje)
+            .filter(
+                Viaje.id_conductor == conductor.id_conductor,
+                Viaje.estado.in_(["pendiente", "aceptado", "en_curso"]),
+            )
+            .order_by(Viaje.fecha_hora.desc())
+            .all()
+        )
+    else:
+        viajes = (
+            db.query(Viaje)
+            .filter(
+                Viaje.id_usuario == current_user.id_usuario,
+                Viaje.estado.in_(["pendiente", "aceptado", "en_curso"]),
+            )
+            .order_by(Viaje.fecha_hora.desc())
+            .all()
+        )
+
+    return [
+        TripResponse(
+            id_viaje=v.id_viaje,
+            id_usuario=v.id_usuario,
+            id_conductor=v.id_conductor,
+            latitud_inicio=v.latitud_inicio,
+            longitud_inicio=v.longitud_inicio,
+            latitud_destino=v.latitud_destino,
+            longitud_destino=v.longitud_destino,
+            distancia_km=v.distancia_km,
+            tiempo_minutos=v.tiempo_minutos,
+            estado=v.estado,
+            fecha_hora=str(v.fecha_hora),
+        )
+        for v in viajes
+    ]
 
 
 # ==================== CREAR VIAJE ====================
