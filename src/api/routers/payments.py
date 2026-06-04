@@ -69,6 +69,28 @@ def create_payment(
 
 
 @router.get(
+    "/trip/{trip_id}",
+    response_model=PaymentResponse,
+    summary="Obtener pago por viaje",
+)
+def get_payment_by_trip(
+    trip_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    viaje = db.get(Viaje, trip_id)
+    if viaje is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado")
+
+    _authorize_payment_access(current_user, db, viaje)
+
+    pago = payment_service.get_payment_by_trip(db, trip_id)
+    if pago is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Este viaje aún no tiene pago registrado")
+    return pago
+
+
+@router.get(
     "/{payment_id}",
     response_model=PaymentResponse,
     summary="Obtener pago por ID",
