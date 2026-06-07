@@ -73,3 +73,11 @@ class TripResponse(BaseModel):
     fecha_hora: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class TripHistoryResponse(TripResponse):
+    """Viaje del historial con metadata de pago y reseñas."""
+    monto_total: Optional[Decimal] = None
+    estado_pago: Optional[str] = None
+    mi_resena: bool = False
+    resenas_completas: bool = False

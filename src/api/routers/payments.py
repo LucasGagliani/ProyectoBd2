@@ -40,7 +40,11 @@ def create_payment(
     if viaje is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado")
 
-    _authorize_payment_access(current_user, db, viaje)
+    if viaje.id_usuario != current_user.id_usuario:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el pasajero puede registrar el pago del viaje.",
+        )
 
     if viaje.estado != "finalizado":
         raise HTTPException(
@@ -131,7 +135,12 @@ def update_payment_status(
     if viaje is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado")
 
-    _authorize_payment_access(current_user, db, viaje)
+    conductor = db.query(Conductor).filter(Conductor.id_usuario == current_user.id_usuario).first()
+    if conductor is None or viaje.id_conductor != conductor.id_conductor:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el conductor asignado puede confirmar el pago.",
+        )
 
     try:
         pago = payment_service.update_payment_status(db, pago, data.estado_transaccion)

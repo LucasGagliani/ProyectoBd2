@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from src.api.routers import auth, users, drivers, trips, payments
+from src.api.routers import auth, users, drivers, trips, payments, reviews
 from src.databases.connections import get_sql
 from src.databases.schema import Base
 
@@ -68,6 +68,7 @@ app.include_router(users.router, prefix="/users", tags=["Usuarios"])
 app.include_router(drivers.router, prefix="/drivers", tags=["Conductores"])
 app.include_router(trips.router, prefix="/trips", tags=["Viajes"])
 app.include_router(payments.router, prefix="/payments", tags=["Pagos"])
+app.include_router(reviews.router, prefix="/reviews", tags=["Reseñas"])
 
 
 @app.get("/", tags=["Health"])

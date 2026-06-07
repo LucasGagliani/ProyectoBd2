@@ -202,6 +202,58 @@ def assign_trip_to_driver(
     db.refresh(conductor)
 
 
+HISTORY_STATES = {"finalizado", "cancelado"}
+
+
+def get_trip_history(db: Session, usuario_id: int, conductor_id: Optional[int] = None) -> list:
+    """
+    Retorna viajes finalizados o cancelados del usuario autenticado.
+    Incluye metadata de pago y reseñas para cada viaje.
+    """
+    from src.databases.schema import Pago, Resena
+
+    if conductor_id is not None:
+        viajes = (
+            db.query(Viaje)
+            .filter(
+                Viaje.id_conductor == conductor_id,
+                Viaje.estado.in_(HISTORY_STATES),
+            )
+            .order_by(Viaje.fecha_hora.desc())
+            .all()
+        )
+    else:
+        viajes = (
+            db.query(Viaje)
+            .filter(
+                Viaje.id_usuario == usuario_id,
+                Viaje.estado.in_(HISTORY_STATES),
+            )
+            .order_by(Viaje.fecha_hora.desc())
+            .all()
+        )
+
+    result = []
+    for viaje in viajes:
+        pago = db.query(Pago).filter(Pago.id_viaje == viaje.id_viaje).first()
+        reviews = db.query(Resena).filter(Resena.id_viaje == viaje.id_viaje).all()
+        mi_resena = any(r.id_autor == usuario_id for r in reviews)
+        resenas_completas = (
+            any(r.tipo == "usuario_a_conductor" for r in reviews)
+            and any(r.tipo == "conductor_a_usuario" for r in reviews)
+        )
+
+        result.append({
+            "viaje": viaje,
+            "monto_total": pago.monto_total if pago else None,
+            "estado_pago": pago.estado_transaccion if pago else None,
+            "mi_resena": mi_resena,
+            "resenas_completas": resenas_completas,
+        })
+
+    return result
+
+
 def has_active_trip(db: Session, conductor_id: int) -> bool:
     """
     Verifica si un conductor tiene un viaje activo.

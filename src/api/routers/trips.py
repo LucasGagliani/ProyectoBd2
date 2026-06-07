@@ -10,7 +10,10 @@ from sqlalchemy.orm import Session
 from src.api.dependencies import get_current_user, get_db, get_redis_client, get_neo4j_client
 from src.databases.schema import Conductor, Viaje
 from typing import List
-from src.models.trip import TripFareResponse, TripStatusResponse, TripStatusUpdate, TripCreate, TripResponse
+from src.models.trip import (
+    TripFareResponse, TripHistoryResponse, TripStatusResponse,
+    TripStatusUpdate, TripCreate, TripResponse,
+)
 from src.services import trip_service
 from src.services.neo4j_service import register_trip_relationship
 
@@ -87,6 +90,47 @@ def get_my_trips(
             fecha_hora=str(v.fecha_hora),
         )
         for v in viajes
+    ]
+
+
+# ==================== HISTORIAL DE VIAJES ====================
+
+@router.get(
+    "/history",
+    response_model=List[TripHistoryResponse],
+    summary="Ver historial de viajes",
+)
+def get_trip_history(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Retorna viajes finalizados o cancelados del usuario autenticado.
+    Incluye monto pagado y estado de reseñas.
+    """
+    conductor = _load_conductor(db, current_user)
+    conductor_id = conductor.id_conductor if conductor else None
+    history = trip_service.get_trip_history(db, current_user.id_usuario, conductor_id)
+
+    return [
+        TripHistoryResponse(
+            id_viaje=item["viaje"].id_viaje,
+            id_usuario=item["viaje"].id_usuario,
+            id_conductor=item["viaje"].id_conductor,
+            latitud_inicio=item["viaje"].latitud_inicio,
+            longitud_inicio=item["viaje"].longitud_inicio,
+            latitud_destino=item["viaje"].latitud_destino,
+            longitud_destino=item["viaje"].longitud_destino,
+            distancia_km=item["viaje"].distancia_km,
+            tiempo_minutos=item["viaje"].tiempo_minutos,
+            estado=item["viaje"].estado,
+            fecha_hora=str(item["viaje"].fecha_hora),
+            monto_total=item["monto_total"],
+            estado_pago=item["estado_pago"],
+            mi_resena=item["mi_resena"],
+            resenas_completas=item["resenas_completas"],
+        )
+        for item in history
     ]
 
 
