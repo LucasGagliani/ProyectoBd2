@@ -10,6 +10,8 @@ import TripDetail from './pages/TripDetail'
 import DriverDashboard from './pages/DriverDashboard'
 import Vehicles from './pages/Vehicles'
 import Payment from './pages/Payment'
+import Review from './pages/Review'
+import TripHistory from './pages/TripHistory'
 
 function AppRoutes() {
   const { isAuth, role } = useAuth()
@@ -25,6 +27,8 @@ function AppRoutes() {
         <Route path="/trips/new" element={<PrivateRoute requiredRole="usuario"><NewTrip /></PrivateRoute>} />
         <Route path="/trips/:id" element={<PrivateRoute><TripDetail /></PrivateRoute>} />
         <Route path="/trips/:id/payment" element={<PrivateRoute><Payment /></PrivateRoute>} />
+        <Route path="/trips/:id/review" element={<PrivateRoute><Review /></PrivateRoute>} />
+        <Route path="/trips/history" element={<PrivateRoute><TripHistory /></PrivateRoute>} />
 
         <Route path="/driver" element={<PrivateRoute requiredRole="conductor"><DriverDashboard /></PrivateRoute>} />
         <Route path="/driver/vehicles" element={<PrivateRoute requiredRole="conductor"><Vehicles /></PrivateRoute>} />

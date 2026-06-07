@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { getDriverMe, updateDriverStatus, updateDriverLocation } from '../api/drivers'
 import { getMyTrips } from '../api/trips'
 import TripMap from '../components/TripMap'
@@ -135,6 +135,11 @@ export default function DriverDashboard() {
           />
         )}
       </div>
+
+      <Link to="/trips/history"
+        className="block w-full border text-center py-3 rounded-xl text-sm font-medium hover:bg-gray-50">
+        Ver historial de viajes
+      </Link>
 
       {/* Viajes asignados */}
       <div className="bg-white border rounded-xl p-5">

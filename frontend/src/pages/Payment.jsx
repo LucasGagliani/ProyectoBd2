@@ -192,10 +192,10 @@ export default function Payment() {
                 <p className="text-green-600 text-sm mt-1">El viaje está completamente cerrado</p>
               </div>
               <button
-                onClick={() => navigate(role === 'conductor' ? '/driver' : '/dashboard')}
+                onClick={() => navigate(`/trips/${id}/review`)}
                 className="w-full bg-black text-white py-3 rounded-xl font-medium hover:bg-gray-800"
               >
-                Volver al inicio
+                Dejar reseña →
               </button>
             </div>
           )}

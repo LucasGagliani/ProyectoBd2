@@ -17,8 +17,13 @@ export default function Dashboard() {
       <p className="text-gray-500 text-sm mb-8">¿A dónde querés ir hoy?</p>
 
       <Link to="/trips/new"
-        className="block w-full bg-black text-white text-center py-4 rounded-xl text-lg font-medium hover:bg-gray-800 mb-6">
+        className="block w-full bg-black text-white text-center py-4 rounded-xl text-lg font-medium hover:bg-gray-800 mb-3">
         Pedir un viaje
+      </Link>
+
+      <Link to="/trips/history"
+        className="block w-full border text-center py-3 rounded-xl text-sm font-medium hover:bg-gray-50 mb-6">
+        Ver historial de viajes
       </Link>
 
       {user && (
