@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { getTrip, getTripStatus, updateTripStatus } from '../api/trips'
+import { updateLocation } from '../api/locations'
 import { useAuth } from '../context/AuthContext'
 import TripMap from '../components/TripMap'
 
@@ -50,6 +51,29 @@ export default function TripDetail() {
     try {
       await updateTripStatus(id, newStatus)
       setStatus(newStatus)
+
+      // Registrar ubicación GPS en Cassandra automáticamente
+      // al iniciar el viaje (origen) y al finalizarlo (destino)
+      if (role === 'conductor' && trip) {
+        if (newStatus === 'en_curso') {
+          // Inicio del viaje → registrar posición de origen
+          await updateLocation({
+            id_viaje: trip.id_viaje,
+            latitud: parseFloat(trip.latitud_inicio),
+            longitud: parseFloat(trip.longitud_inicio),
+            velocidad_estimada: 0,
+          }).catch(() => {}) // silencioso si falla
+        } else if (newStatus === 'finalizado') {
+          // Fin del viaje → registrar posición de destino
+          await updateLocation({
+            id_viaje: trip.id_viaje,
+            latitud: parseFloat(trip.latitud_destino),
+            longitud: parseFloat(trip.longitud_destino),
+            velocidad_estimada: 0,
+          }).catch(() => {}) // silencioso si falla
+        }
+      }
+
       if (newStatus === 'finalizado') navigate(`/trips/${id}/payment`)
     } catch (err) {
       setError(err.response?.data?.detail || 'Error al actualizar estado')

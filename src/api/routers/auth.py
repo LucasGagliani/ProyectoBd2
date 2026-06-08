@@ -185,7 +185,14 @@ def login(
     role = "conductor" if conductor else "usuario"
 
     token = auth_service.create_access_token(user_id=user.id_usuario, role=role)
-    auth_service.store_token_in_redis(redis, token, user.id_usuario, role)
+    auth_service.store_token_in_redis(
+        redis,
+        token,
+        user_id=user.id_usuario,
+        role=role,
+        nombre=user.nombre,
+        conductor_id=conductor.id_conductor if conductor else None,
+    )
 
     logger.info(f"Login exitoso: user_id={user.id_usuario} role={role}")
     return TokenResponse(

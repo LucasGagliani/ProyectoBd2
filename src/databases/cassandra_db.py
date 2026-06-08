@@ -45,11 +45,35 @@ class CassandraDatabase:
                 connection_class=AsyncioConnection,
             )
 
+            # Conectar sin keyspace para poder crearlo si no existe
+            temp_session = self.cluster.connect()
+            temp_session.execute(f"""
+                CREATE KEYSPACE IF NOT EXISTS {settings.CASSANDRA_KEYSPACE}
+                WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}}
+            """)
+            temp_session.shutdown()
+
             self.session = self.cluster.connect(settings.CASSANDRA_KEYSPACE)
+            self._init_tables()
             logger.info("Connected to Cassandra database")
         except Exception as e:
             logger.error(f"Failed to connect to Cassandra: {e}")
             raise
+
+    def _init_tables(self):
+        """Crea las tablas necesarias si no existen."""
+        self.session.execute("""
+            CREATE TABLE IF NOT EXISTS ubicaciones_viaje (
+                id_viaje    int,
+                timestamp   timestamp,
+                id_conductor int,
+                latitud     double,
+                longitud    double,
+                velocidad_estimada double,
+                PRIMARY KEY (id_viaje, timestamp)
+            ) WITH CLUSTERING ORDER BY (timestamp DESC)
+        """)
+        logger.info("Tablas Cassandra verificadas/creadas")
 
     def execute_query(self, query: str, parameters: Optional[List[Any]] = None):
         """

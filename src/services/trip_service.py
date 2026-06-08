@@ -132,11 +132,23 @@ def find_nearest_driver(
     min_distance = float("inf")
 
     for driver in available_drivers:
-        lat = driver.latitud_actual
-        lon = driver.longitud_actual
-        if lat is None or lon is None:
+        # Intentar posición desde Redis primero (más actualizada), luego fallback a PostgreSQL
+        pos = None
+        if redis_client is not None:
+            try:
+                from src.services.location_service import get_conductor_position_redis
+                pos = get_conductor_position_redis(redis_client, driver.id_conductor)
+            except Exception:
+                pass
+
+        if pos:
+            lat, lon = pos["lat"], pos["lon"]
+        elif driver.latitud_actual is not None and driver.longitud_actual is not None:
+            lat, lon = float(driver.latitud_actual), float(driver.longitud_actual)
+        else:
             continue
-        distance = _calculate_distance(usuario_lat, usuario_lon, float(lat), float(lon))
+
+        distance = _calculate_distance(usuario_lat, usuario_lon, lat, lon)
         if distance < min_distance:
             min_distance = distance
             nearest_driver = driver

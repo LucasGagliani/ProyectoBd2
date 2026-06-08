@@ -54,26 +54,37 @@ def sync_conductor_node(neo4j, conductor_id: int, nombre: str) -> None:
         logger.warning(f"No se pudo sincronizar nodo Conductor {conductor_id} en Neo4j: {e}")
 
 
-def register_trip_relationship(neo4j, usuario_id: int, conductor_id: int, viaje_id: int) -> None:
+def register_trip_relationship(
+    neo4j,
+    usuario_id: int,
+    conductor_id: int,
+    viaje_id: int,
+    usuario_nombre: str = "",
+    conductor_nombre: str = "",
+) -> None:
     """
     Registra una relación REALIZO_VIAJE entre Usuario y Conductor en Neo4j.
-    Se llama cuando un viaje es asignado a un conductor.
-    Permite luego consultar el historial de viajes para el matching preferencial.
+    Usa MERGE + SET para que los nodos siempre tengan nombre,
+    incluso si fueron creados por primera vez aquí.
     """
     if neo4j is None:
         return
     try:
         query = """
-        MATCH (u:Usuario {id_usuario: $id_usuario})
-        MATCH (c:Conductor {id_conductor: $id_conductor})
+        MERGE (u:Usuario {id_usuario: $id_usuario})
+        SET u.nombre = $usuario_nombre
+        MERGE (c:Conductor {id_conductor: $id_conductor})
+        SET c.nombre = $conductor_nombre
         CREATE (u)-[:REALIZO_VIAJE {id_viaje: $id_viaje, fecha: datetime()}]->(c)
         """
         neo4j.execute_query(query, {
             "id_usuario": usuario_id,
             "id_conductor": conductor_id,
             "id_viaje": viaje_id,
+            "usuario_nombre": usuario_nombre,
+            "conductor_nombre": conductor_nombre,
         }, mode="w")
-        logger.debug(f"Relación REALIZO_VIAJE registrada: usuario={usuario_id} → conductor={conductor_id}")
+        logger.debug(f"Relación REALIZO_VIAJE registrada: usuario={usuario_id} ({usuario_nombre}) → conductor={conductor_id} ({conductor_nombre})")
     except Exception as e:
         logger.warning(f"No se pudo registrar relación de viaje en Neo4j: {e}")
 

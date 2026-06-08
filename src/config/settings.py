@@ -29,11 +29,12 @@ class Settings(BaseSettings):
     REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
 
     # MongoDB Configuration
+    MONGODB_URI: str = os.getenv("MONGODB_URI", "")          # URI completa (Atlas). Tiene precedencia.
     MONGODB_HOST: str = os.getenv("MONGODB_HOST", "localhost")
     MONGODB_PORT: int = int(os.getenv("MONGODB_PORT", "27017"))
     MONGODB_USER: str = os.getenv("MONGODB_USER", "")
     MONGODB_PASSWORD: str = os.getenv("MONGODB_PASSWORD", "")
-    MONGODB_DATABASE: str = os.getenv("MONGODB_DATABASE", "mydb")
+    MONGODB_DATABASE: str = os.getenv("MONGODB_DATABASE", "uber_tpo")
 
     # Neo4j Configuration (supports both local and Aura)
     NEO4J_URI: str = os.getenv("NEO4J_URI", "bolt://localhost:7687")
@@ -43,12 +44,16 @@ class Settings(BaseSettings):
     NEO4J_HOST: str = os.getenv("NEO4J_HOST", "localhost")
     NEO4J_PORT: int = int(os.getenv("NEO4J_PORT", "7687"))
 
-    # Cassandra Configuration
+    # Cassandra / DataStax Astra Configuration
     CASSANDRA_HOST: str = os.getenv("CASSANDRA_HOST", "localhost")
     CASSANDRA_PORT: int = int(os.getenv("CASSANDRA_PORT", "9042"))
-    CASSANDRA_KEYSPACE: str = os.getenv("CASSANDRA_KEYSPACE", "mykeyspace")
+    CASSANDRA_KEYSPACE: str = os.getenv("CASSANDRA_KEYSPACE", "uber")
     CASSANDRA_USER: str = os.getenv("CASSANDRA_USER", "")
     CASSANDRA_PASSWORD: str = os.getenv("CASSANDRA_PASSWORD", "")
+    # Astra DB (DataStax cloud)
+    ASTRA_TOKEN: str = os.getenv("ASTRA_TOKEN", "")
+    ASTRA_API_ENDPOINT: str = os.getenv("ASTRA_API_ENDPOINT", "")
+    ASTRA_KEYSPACE: str = os.getenv("ASTRA_KEYSPACE", "uber")
 
     # JWT Configuration
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "changeme-secret-key")

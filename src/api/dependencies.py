@@ -35,6 +35,18 @@ def get_redis_client():
     return get_redis().client
 
 
+def get_mongo_client():
+    """Dependency que provee la instancia MongoDBDatabase (None si no disponible)."""
+    from src.databases.connections import get_mongo
+    return get_mongo()
+
+
+def get_cassandra_client():
+    """Dependency que provee la instancia CassandraDatabase (None si no disponible)."""
+    from src.databases.connections import get_cassandra
+    return get_cassandra()
+
+
 def get_neo4j_client():
     """
     Dependency que provee la instancia Neo4jDatabase.

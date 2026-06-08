@@ -1,0 +1,246 @@
+{
+  "info": {
+    "name": "Uber TPO — Locations (GPS)",
+    "description": "RF-10: GPS tracking en tiempo real.\n\nCassandra (Astra DB) → historial del recorrido\nRedis → posición actual del conductor\nPostgreSQL → sincroniza latitud_actual/longitud_actual\n\nPREREQUISITOS:\n1. App corriendo (python main.py)\n2. Login Conductor → poblar {{token}}\n3. Tener un viaje activo para asociar ubicaciones",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "trip_id", "value": "", "type": "string" },
+    { "key": "conductor_id", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "🔑 Setup — Login Conductor",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"carlos@gmail.com\",\n  \"contrasena\": \"pass456\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.expect(body.role).to.eql('conductor');",
+              "pm.collectionVariables.set('token', body.access_token);",
+              "pm.collectionVariables.set('conductor_id', body.user_id);",
+              "console.log('Token conductor listo');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "📍 Actualizar posición del conductor",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "{{base_url}}/locations/update", "host": ["{{base_url}}"], "path": ["locations", "update"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id_viaje\": null,\n  \"latitud\": -34.6037,\n  \"longitud\": -58.3816,\n  \"velocidad_estimada\": 45.5\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Posición registrada', () => {",
+              "    const body = pm.response.json();",
+              "    pm.expect(body).to.have.property('id_conductor');",
+              "    pm.expect(body).to.have.property('latitud');",
+              "    pm.expect(body).to.have.property('longitud');",
+              "    console.log('Posición actualizada: lat=' + body.latitud + ' lon=' + body.longitud);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "📍 Actualizar posición con viaje activo (guarda en Cassandra)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "{{base_url}}/locations/update", "host": ["{{base_url}}"], "path": ["locations", "update"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id_viaje\": {{trip_id}},\n  \"latitud\": -34.6100,\n  \"longitud\": -58.3900,\n  \"velocidad_estimada\": 60.0\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Posición con viaje registrada', () => {",
+              "    const body = pm.response.json();",
+              "    pm.expect(body.id_viaje).to.not.be.null;",
+              "    console.log('Guardado en Cassandra para viaje: ' + body.id_viaje);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "📍 Simular recorrido (3 puntos consecutivos)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "{{base_url}}/locations/update", "host": ["{{base_url}}"], "path": ["locations", "update"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id_viaje\": {{trip_id}},\n  \"latitud\": -34.6158,\n  \"longitud\": -58.4333,\n  \"velocidad_estimada\": 30.0\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "📍 Token de usuario (debe fallar — solo conductores)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "{{base_url}}/locations/update", "host": ["{{base_url}}"], "path": ["locations", "update"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"latitud\": -34.6037,\n  \"longitud\": -58.3816\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 403 — solo conductores pueden actualizar posición', () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "🗺️ Historial GPS del viaje (Cassandra)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": { "raw": "{{base_url}}/locations/{{trip_id}}/history", "host": ["{{base_url}}"], "path": ["locations", "{{trip_id}}", "history"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Historial GPS retornado', () => {",
+              "    const body = pm.response.json();",
+              "    pm.expect(body).to.have.property('id_viaje');",
+              "    pm.expect(body).to.have.property('registros');",
+              "    pm.expect(body.registros).to.be.an('array');",
+              "    console.log('Puntos GPS en historial: ' + body.registros.length);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "🗺️ Historial GPS — viaje inexistente (debe fallar)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": { "raw": "{{base_url}}/locations/99999/history", "host": ["{{base_url}}"], "path": ["locations", "99999", "history"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 404 — viaje no encontrado', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "📡 Posición actual del conductor (Redis)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": { "raw": "{{base_url}}/locations/conductor/{{conductor_id}}", "host": ["{{base_url}}"], "path": ["locations", "conductor", "{{conductor_id}}"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Posición actual retornada', () => {",
+              "    const body = pm.response.json();",
+              "    pm.expect(body).to.have.property('latitud');",
+              "    pm.expect(body).to.have.property('longitud');",
+              "    console.log('Posición actual: lat=' + body.latitud + ' lon=' + body.longitud);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "📍 Coordenadas inválidas (debe fallar)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "{{base_url}}/locations/update", "host": ["{{base_url}}"], "path": ["locations", "update"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"latitud\": 999,\n  \"longitud\": -58.3816\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 422 — coordenada inválida', () => pm.response.to.have.status(422));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

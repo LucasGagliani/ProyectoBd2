@@ -21,12 +21,14 @@ class MongoDBDatabase:
     def _connect(self):
         """Establish MongoDB connection."""
         try:
-            # Build connection string
-            if settings.MONGODB_USER and settings.MONGODB_PASSWORD:
+            # Prioridad: MONGODB_URI completa (Atlas) → host:port local
+            if settings.MONGODB_URI:
+                connection_string = settings.MONGODB_URI
+            elif settings.MONGODB_USER and settings.MONGODB_PASSWORD:
                 connection_string = (
                     f"mongodb+srv://{settings.MONGODB_USER}:{settings.MONGODB_PASSWORD}"
-                    f"@{settings.MONGODB_HOST}:{settings.MONGODB_PORT}/"
-                    f"{settings.MONGODB_DATABASE}?retryWrites=true&w=majority"
+                    f"@{settings.MONGODB_HOST}/{settings.MONGODB_DATABASE}"
+                    f"?retryWrites=true&w=majority"
                 )
             else:
                 connection_string = (

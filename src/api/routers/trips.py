@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user, get_db, get_redis_client, get_neo4j_client
-from src.databases.schema import Conductor, Viaje
+from src.databases.schema import Conductor, Viaje, Usuario
 from typing import List
 from src.models.trip import (
     TripFareResponse, TripHistoryResponse, TripStatusResponse,
@@ -194,8 +194,15 @@ def create_trip(
 
         if best_driver:
             trip_service.assign_trip_to_driver(db, viaje, best_driver)
-            # Registrar relación en el grafo Neo4j para futuros matchings
-            register_trip_relationship(neo4j, current_user.id_usuario, best_driver.id_conductor, viaje.id_viaje)
+            conductor_usuario = db.get(Usuario, best_driver.id_usuario)
+            register_trip_relationship(
+                neo4j,
+                usuario_id=current_user.id_usuario,
+                conductor_id=best_driver.id_conductor,
+                viaje_id=viaje.id_viaje,
+                usuario_nombre=current_user.nombre,
+                conductor_nombre=conductor_usuario.nombre if conductor_usuario else "",
+            )
             logger.info(f"Viaje {viaje.id_viaje} asignado a conductor {best_driver.id_conductor}")
         else:
             db.commit()
@@ -291,6 +298,7 @@ def update_trip_status(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
     redis=Depends(get_redis_client),
+    neo4j=Depends(get_neo4j_client),
 ):
     viaje = db.get(Viaje, trip_id)
     if viaje is None:
@@ -327,6 +335,16 @@ def update_trip_status(
             assigned_conductor.estado = "ocupado"
         else:
             conductor.estado = "ocupado"
+        # Registrar relación en Neo4j cuando el conductor acepta manualmente
+        pasajero = db.get(Usuario, viaje.id_usuario)
+        register_trip_relationship(
+            neo4j,
+            usuario_id=viaje.id_usuario,
+            conductor_id=conductor.id_conductor,
+            viaje_id=trip_id,
+            usuario_nombre=pasajero.nombre if pasajero else "",
+            conductor_nombre=current_user.nombre,
+        )
 
     elif target_status in {"en_curso", "finalizado"}:
         if conductor is None or viaje.id_conductor != conductor.id_conductor:

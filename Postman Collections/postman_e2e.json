@@ -1,0 +1,364 @@
+{
+  "info": {
+    "name": "Uber TPO — E2E Completo",
+    "description": "Flujo end-to-end que cubre las 5 DBs:\n- PostgreSQL: usuarios, conductores, viajes, pagos\n- Redis: sesiones JWT, estado del viaje cacheado, posición conductor\n- Neo4j: grafo de relaciones usuario↔conductor\n- MongoDB: reseñas y calificaciones\n- Cassandra (Astra): historial GPS del viaje\n\nCorrer en orden de arriba a abajo. Los tests guardan variables automáticamente.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000" },
+    { "key": "token_usuario", "value": "" },
+    { "key": "token_conductor", "value": "" },
+    { "key": "usuario_id", "value": "" },
+    { "key": "conductor_id", "value": "" },
+    { "key": "vehicle_id", "value": "" },
+    { "key": "trip_id", "value": "" },
+    { "key": "payment_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "01 — Health Check",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{base_url}}/", "host": ["{{base_url}}"], "path": [""] }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('API corriendo', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql('ok'); });"
+      ]}}]
+    },
+    {
+      "name": "02 — Registrar Pasajero",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{base_url}}/auth/register/usuario", "host": ["{{base_url}}"], "path": ["auth","register","usuario"] },
+        "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"E2E Pasajero\",\n  \"email\": \"e2e.pasajero@test.com\",\n  \"telefono\": \"1111111111\",\n  \"contrasena\": \"test1234\"\n}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Pasajero registrado (201) o ya existe (409)', () => { pm.expect([201,409]).to.include(pm.response.code); });",
+        "if (pm.response.code === 201) { pm.collectionVariables.set('usuario_id', pm.response.json().id_usuario); }"
+      ]}}]
+    },
+    {
+      "name": "03 — Registrar Conductor",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{base_url}}/auth/register/conductor", "host": ["{{base_url}}"], "path": ["auth","register","conductor"] },
+        "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"E2E Conductor\",\n  \"email\": \"e2e.conductor@test.com\",\n  \"telefono\": \"2222222222\",\n  \"contrasena\": \"test1234\",\n  \"nro_licencia\": \"E2E-LIC-001\"\n}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Conductor registrado (201) o ya existe (409)', () => { pm.expect([201,409]).to.include(pm.response.code); });",
+        "if (pm.response.code === 201) { pm.collectionVariables.set('conductor_id', pm.response.json().id_conductor); }"
+      ]}}]
+    },
+    {
+      "name": "04 — Login Conductor → token en Redis",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth","login"] },
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"e2e.conductor@test.com\",\n  \"contrasena\": \"test1234\"\n}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Login conductor OK', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "pm.expect(b.role).to.eql('conductor');",
+        "pm.collectionVariables.set('token_conductor', b.access_token);",
+        "pm.collectionVariables.set('conductor_id', b.user_id);",
+        "console.log('Token conductor guardado en Redis y en variable');"
+      ]}}]
+    },
+    {
+      "name": "05 — Crear Vehículo → PostgreSQL",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token_conductor}}" }],
+        "url": { "raw": "{{base_url}}/drivers/me/vehicles", "host": ["{{base_url}}"], "path": ["drivers","me","vehicles"] },
+        "body": { "mode": "raw", "raw": "{\n  \"marca\": \"Toyota\",\n  \"modelo\": \"Corolla E2E\",\n  \"anio\": 2023,\n  \"nro_placa\": \"E2E-001\",\n  \"color\": \"Blanco\",\n  \"tipo_vehiculo\": \"sedan\",\n  \"capacidad_pasajeros\": 4\n}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Vehículo creado (201) o placa duplicada (409)', () => { pm.expect([201,409]).to.include(pm.response.code); });",
+        "if (pm.response.code === 201) { pm.collectionVariables.set('vehicle_id', pm.response.json().id_vehiculo); console.log('vehicle_id:', pm.response.json().id_vehiculo); }"
+      ]}}]
+    },
+    {
+      "name": "06 — Setear Ubicación Conductor → Redis + PostgreSQL",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token_conductor}}" }],
+        "url": { "raw": "{{base_url}}/locations/update", "host": ["{{base_url}}"], "path": ["locations","update"] },
+        "body": { "mode": "raw", "raw": "{\n  \"id_viaje\": null,\n  \"latitud\": -34.6037,\n  \"longitud\": -58.3816,\n  \"velocidad_estimada\": 0\n}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Posición actualizada en Redis y PostgreSQL', () => pm.response.to.have.status(200));",
+        "console.log('Posición guardada en Redis (tiempo real) y PostgreSQL (latitud_actual/longitud_actual)');"
+      ]}}]
+    },
+    {
+      "name": "07 — Cambiar Estado a Disponible → PostgreSQL",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token_conductor}}" }],
+        "url": { "raw": "{{base_url}}/drivers/me/estado", "host": ["{{base_url}}"], "path": ["drivers","me","estado"] },
+        "body": { "mode": "raw", "raw": "{\n  \"estado\": \"disponible\"\n}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Conductor disponible', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().estado).to.eql('disponible'); });"
+      ]}}]
+    },
+    {
+      "name": "08 — Login Pasajero → token en Redis",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth","login"] },
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"e2e.pasajero@test.com\",\n  \"contrasena\": \"test1234\"\n}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Login pasajero OK', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "pm.collectionVariables.set('token_usuario', b.access_token);",
+        "pm.collectionVariables.set('usuario_id', b.user_id);",
+        "console.log('Token pasajero guardado en Redis');"
+      ]}}]
+    },
+    {
+      "name": "09 — Crear Viaje → PostgreSQL + Neo4j",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token_usuario}}" }],
+        "url": { "raw": "{{base_url}}/trips", "host": ["{{base_url}}"], "path": ["trips"] },
+        "body": { "mode": "raw", "raw": "{\n  \"latitud_inicio\": -34.6037,\n  \"longitud_inicio\": -58.3816,\n  \"latitud_destino\": -34.6158,\n  \"longitud_destino\": -58.4333,\n  \"distancia_km\": 5.2,\n  \"tiempo_minutos\": 15\n}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Viaje creado', () => pm.response.to.have.status(201));",
+        "const b = pm.response.json();",
+        "pm.collectionVariables.set('trip_id', b.id_viaje);",
+        "console.log('trip_id:', b.id_viaje, '| estado:', b.estado);",
+        "if (b.id_conductor) console.log('Auto-asignado a conductor:', b.id_conductor, '→ relación REALIZO_VIAJE en Neo4j');",
+        "else console.log('Sin conductor disponible — estado pendiente');"
+      ]}}]
+    },
+    {
+      "name": "10 — Conductor: Aceptar Viaje → PostgreSQL + Neo4j",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token_conductor}}" }],
+        "url": { "raw": "{{base_url}}/trips/{{trip_id}}/status", "host": ["{{base_url}}"], "path": ["trips","{{trip_id}}","status"] },
+        "body": { "mode": "raw", "raw": "{\n  \"estado\": \"aceptado\"\n}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Viaje aceptado (200) o ya aceptado (400)', () => { pm.expect([200,400]).to.include(pm.response.code); });",
+        "if (pm.response.code === 200) console.log('REALIZO_VIAJE registrado en Neo4j');"
+      ]}}]
+    },
+    {
+      "name": "11 — Ver Estado Viaje → Redis (cache)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token_usuario}}" }],
+        "url": { "raw": "{{base_url}}/trips/{{trip_id}}/status", "host": ["{{base_url}}"], "path": ["trips","{{trip_id}}","status"] }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Estado del viaje OK', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "console.log('Estado:', b.estado, '| Desde Redis cache:', b.cached);"
+      ]}}]
+    },
+    {
+      "name": "12 — Conductor: Iniciar Viaje → GPS origen en Cassandra",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token_conductor}}" }],
+        "url": { "raw": "{{base_url}}/trips/{{trip_id}}/status", "host": ["{{base_url}}"], "path": ["trips","{{trip_id}}","status"] },
+        "body": { "mode": "raw", "raw": "{\n  \"estado\": \"en_curso\"\n}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Viaje iniciado', () => pm.response.to.have.status(200));",
+        "console.log('Coordenadas de ORIGEN registradas automáticamente en Cassandra (Astra)');"
+      ]}}]
+    },
+    {
+      "name": "13 — Conductor: Actualizar Posición Intermedia → Cassandra + Redis",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token_conductor}}" }],
+        "url": { "raw": "{{base_url}}/locations/update", "host": ["{{base_url}}"], "path": ["locations","update"] },
+        "body": { "mode": "raw", "raw": "{\n  \"id_viaje\": {{trip_id}},\n  \"latitud\": -34.6100,\n  \"longitud\": -58.4000,\n  \"velocidad_estimada\": 55.0\n}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Posición intermedia guardada', () => pm.response.to.have.status(200));",
+        "console.log('Punto GPS intermedio → Cassandra (historial) + Redis (posición actual)');"
+      ]}}]
+    },
+    {
+      "name": "14 — Conductor: Finalizar Viaje → GPS destino en Cassandra",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token_conductor}}" }],
+        "url": { "raw": "{{base_url}}/trips/{{trip_id}}/status", "host": ["{{base_url}}"], "path": ["trips","{{trip_id}}","status"] },
+        "body": { "mode": "raw", "raw": "{\n  \"estado\": \"finalizado\"\n}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Viaje finalizado', () => pm.response.to.have.status(200));",
+        "console.log('Coordenadas de DESTINO registradas automáticamente en Cassandra (Astra)');"
+      ]}}]
+    },
+    {
+      "name": "15 — Ver Historial GPS del Viaje → Cassandra",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token_conductor}}" }],
+        "url": { "raw": "{{base_url}}/locations/{{trip_id}}/history", "host": ["{{base_url}}"], "path": ["locations","{{trip_id}}","history"] }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Historial GPS OK', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "console.log('Puntos GPS en Cassandra para viaje', b.id_viaje, ':', b.registros.length);"
+      ]}}]
+    },
+    {
+      "name": "16 — Ver Tarifa del Viaje → PostgreSQL",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token_usuario}}" }],
+        "url": { "raw": "{{base_url}}/trips/{{trip_id}}/fare", "host": ["{{base_url}}"], "path": ["trips","{{trip_id}}","fare"] }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Tarifa calculada', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "console.log('Tarifa base:', b.tarifa_base, '| Total:', b.monto_total);"
+      ]}}]
+    },
+    {
+      "name": "17 — Registrar Pago → PostgreSQL",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token_usuario}}" }],
+        "url": { "raw": "{{base_url}}/payments", "host": ["{{base_url}}"], "path": ["payments"] },
+        "body": { "mode": "raw", "raw": "{\n  \"id_viaje\": {{trip_id}},\n  \"monto_base\": 774.00,\n  \"tarifa_adicional\": 0,\n  \"metodo_pago\": \"tarjeta_credito\",\n  \"estado_transaccion\": \"pendiente\"\n}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Pago creado', () => pm.response.to.have.status(201));",
+        "pm.collectionVariables.set('payment_id', pm.response.json().id_pago);",
+        "console.log('payment_id:', pm.response.json().id_pago);"
+      ]}}]
+    },
+    {
+      "name": "18 — Aprobar Pago → PostgreSQL",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token_conductor}}" }],
+        "url": { "raw": "{{base_url}}/payments/{{payment_id}}/status", "host": ["{{base_url}}"], "path": ["payments","{{payment_id}}","status"] },
+        "body": { "mode": "raw", "raw": "{\n  \"estado_transaccion\": \"aprobado\"\n}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Pago aprobado', () => pm.response.to.have.status(200));",
+        "pm.expect(pm.response.json().estado_transaccion).to.eql('aprobado');"
+      ]}}]
+    },
+    {
+      "name": "19 — Pasajero: Reseñar Conductor → MongoDB",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token_usuario}}" }],
+        "url": { "raw": "{{base_url}}/reviews", "host": ["{{base_url}}"], "path": ["reviews"] },
+        "body": { "mode": "raw", "raw": "{\n  \"id_viaje\": {{trip_id}},\n  \"calificacion\": 5,\n  \"comentario\": \"Excelente conductor, muy puntual\"\n}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Reseña pasajero→conductor creada en MongoDB', () => pm.response.to.have.status(201));",
+        "console.log('Documento guardado en MongoDB colección resenas | tipo: usuario_a_conductor');"
+      ]}}]
+    },
+    {
+      "name": "20 — Conductor: Reseñar Pasajero → MongoDB + calificacion_promedio en PostgreSQL",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token_conductor}}" }],
+        "url": { "raw": "{{base_url}}/reviews", "host": ["{{base_url}}"], "path": ["reviews"] },
+        "body": { "mode": "raw", "raw": "{\n  \"id_viaje\": {{trip_id}},\n  \"calificacion\": 4,\n  \"comentario\": \"Buen pasajero, muy cordial\"\n}" }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Reseña conductor→pasajero creada en MongoDB', () => pm.response.to.have.status(201));",
+        "console.log('Documento en MongoDB | calificacion_promedio actualizado en PostgreSQL');"
+      ]}}]
+    },
+    {
+      "name": "21 — Ver Reseñas del Viaje → MongoDB",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token_usuario}}" }],
+        "url": { "raw": "{{base_url}}/reviews/trip/{{trip_id}}", "host": ["{{base_url}}"], "path": ["reviews","trip","{{trip_id}}"] }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Reseñas OK', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "pm.expect(b.length).to.eql(2);",
+        "console.log('2 reseñas leídas desde MongoDB:', b.map(r => r.tipo));"
+      ]}}]
+    },
+    {
+      "name": "22 — Ver Perfil Pasajero (calificación) → PostgreSQL",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token_usuario}}" }],
+        "url": { "raw": "{{base_url}}/users/me", "host": ["{{base_url}}"], "path": ["users","me"] }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Perfil pasajero OK', () => pm.response.to.have.status(200));",
+        "console.log('calificacion_promedio pasajero:', pm.response.json().calificacion_promedio);"
+      ]}}]
+    },
+    {
+      "name": "23 — Ver Perfil Conductor (calificación) → PostgreSQL",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token_conductor}}" }],
+        "url": { "raw": "{{base_url}}/drivers/me", "host": ["{{base_url}}"], "path": ["drivers","me"] }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Perfil conductor OK', () => pm.response.to.have.status(200));",
+        "console.log('calificacion_promedio conductor:', pm.response.json().calificacion_promedio);"
+      ]}}]
+    },
+    {
+      "name": "24 — Historial de Viajes → PostgreSQL + MongoDB",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token_usuario}}" }],
+        "url": { "raw": "{{base_url}}/trips/history", "host": ["{{base_url}}"], "path": ["trips","history"] }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Historial OK', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "console.log('Viajes en historial:', b.length, '| Con reseña propia:', b.filter(v => v.mi_resena).length);"
+      ]}}]
+    },
+    {
+      "name": "25 — Logout Pasajero → revoca token en Redis",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token_usuario}}" }],
+        "url": { "raw": "{{base_url}}/auth/logout", "host": ["{{base_url}}"], "path": ["auth","logout"] }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Logout OK', () => pm.response.to.have.status(204));",
+        "pm.collectionVariables.set('token_usuario', '');",
+        "console.log('Token pasajero revocado en Redis');"
+      ]}}]
+    },
+    {
+      "name": "26 — Logout Conductor → revoca token en Redis",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token_conductor}}" }],
+        "url": { "raw": "{{base_url}}/auth/logout", "host": ["{{base_url}}"], "path": ["auth","logout"] }
+      },
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Logout OK', () => pm.response.to.have.status(204));",
+        "pm.collectionVariables.set('token_conductor', '');",
+        "console.log('Token conductor revocado en Redis');"
+      ]}}]
+    }
+  ]
+}

@@ -3,6 +3,7 @@ Servicio de autenticación.
 Maneja hashing de contraseñas y generación/verificación de tokens JWT.
 """
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -78,10 +79,25 @@ def redis_token_key(token: str) -> str:
     return f"{REDIS_TOKEN_PREFIX}{token}"
 
 
-def store_token_in_redis(redis_client, token: str, user_id: int, role: str) -> None:
-    """Guarda el token en Redis con TTL igual al tiempo de expiración del JWT."""
+def store_token_in_redis(
+    redis_client,
+    token: str,
+    user_id: int,
+    role: str,
+    nombre: str,
+    conductor_id: Optional[int] = None,
+) -> None:
+    """
+    Guarda el token en Redis con TTL igual al tiempo de expiración del JWT.
+    Almacena nombre, role, user_id y (para conductores) id_conductor.
+    """
     key = redis_token_key(token)
-    value = f"{user_id}:{role}"
+    value = json.dumps({
+        "user_id": user_id,
+        "role": role,
+        "nombre": nombre,
+        "conductor_id": conductor_id,
+    })
     redis_client.set(key, value, ex=settings.JWT_EXPIRE_MINUTES * 60)
 
 
