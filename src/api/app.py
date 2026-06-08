@@ -19,15 +19,31 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Crea las tablas en PostgreSQL si no existen (al arrancar la app)."""
+    """Verifica conexiones al arrancar la app."""
+    # SQL
     try:
         sql = get_sql()
         Base.metadata.create_all(bind=sql.engine)
-        logger.info("Tablas SQL verificadas/creadas correctamente")
+        logger.info("✓ SQL: tablas verificadas/creadas")
     except Exception as e:
-        logger.error(f"Error al inicializar schema SQL: {e}")
+        logger.error(f"✗ SQL: {e}")
+
+    # Neo4j — forzar inicialización al arrancar para ver el error inmediatamente
+    try:
+        from src.databases.connections import get_neo4j, _neo4j_initialized
+        import src.databases.connections as _conn
+        # Resetear singleton para forzar reintento en cada restart
+        _conn._neo4j_initialized = False
+        _conn._neo4j = None
+        neo4j = get_neo4j()
+        if neo4j is not None:
+            logger.info("✓ Neo4j: conectado correctamente")
+        else:
+            logger.warning("✗ Neo4j: no disponible — los viajes no se registrarán en el grafo")
+    except Exception as e:
+        logger.error(f"✗ Neo4j: {e}")
+
     yield
-    # Cleanup al apagar (por ahora no necesitamos nada)
 
 
 app = FastAPI(

@@ -195,6 +195,8 @@ def create_trip(
         if best_driver:
             trip_service.assign_trip_to_driver(db, viaje, best_driver)
             conductor_usuario = db.get(Usuario, best_driver.id_usuario)
+            if neo4j is None:
+                logger.warning(f"Neo4j no disponible — relación del viaje {viaje.id_viaje} no se registró en el grafo")
             register_trip_relationship(
                 neo4j,
                 usuario_id=current_user.id_usuario,
