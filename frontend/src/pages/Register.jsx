@@ -26,7 +26,20 @@ export default function Register() {
       login(data.access_token, data.role, data.user_id)
       navigate(data.role === 'conductor' ? '/driver' : '/dashboard')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error al registrarse')
+      // Manejar diferentes tipos de errores
+      let errorMsg = 'Error al registrarse'
+      if (err.response?.data) {
+        const detail = err.response.data.detail
+        if (typeof detail === 'string') {
+          errorMsg = detail
+        } else if (Array.isArray(detail)) {
+          // Error de validación de Pydantic
+          errorMsg = detail.map(e => `${e.loc?.[1] || 'campo'}: ${e.msg}`).join('; ')
+        } else if (detail?.msg) {
+          errorMsg = detail.msg
+        }
+      }
+      setError(errorMsg)
     } finally {
       setLoading(false)
     }

@@ -204,7 +204,10 @@ def assign_trip_to_driver(
     - Cambia id_conductor del viaje
     - Cambia estado a 'aceptado'
     - Cambia estado del conductor a 'ocupado'
+    - Crea notificación para el conductor
     """
+    from src.services import notification_service
+    
     viaje.id_conductor = conductor.id_conductor
     viaje.estado = "aceptado"
     conductor.estado = "ocupado"
@@ -212,6 +215,22 @@ def assign_trip_to_driver(
     db.commit()
     db.refresh(viaje)
     db.refresh(conductor)
+    
+    # Crear notificación para el conductor
+    try:
+        notification_service.create_notification(
+            db=db,
+            id_usuario=conductor.id_usuario,
+            titulo="¡Nuevo viaje asignado!",
+            mensaje=(
+                "Se te asignó un nuevo viaje. "
+                f"Destino: ({viaje.latitud_destino}, {viaje.longitud_destino})."
+            ),
+            tipo="viaje",
+            id_referencia=viaje.id_viaje,
+        )
+    except Exception as e:
+        print(f"Error creating notification: {e}")
 
 
 HISTORY_STATES = {"finalizado", "cancelado"}
@@ -222,7 +241,9 @@ def get_trip_history(db: Session, usuario_id: int, conductor_id: Optional[int] =
     Retorna viajes finalizados o cancelados del usuario autenticado.
     Incluye metadata de pago y reseñas para cada viaje.
     """
+    from src.databases.connections import get_mongo
     from src.databases.schema import Pago, Resena
+    from src.services import review_service
 
     if conductor_id is not None:
         viajes = (
@@ -246,14 +267,23 @@ def get_trip_history(db: Session, usuario_id: int, conductor_id: Optional[int] =
         )
 
     result = []
+    mongo = get_mongo()
     for viaje in viajes:
         pago = db.query(Pago).filter(Pago.id_viaje == viaje.id_viaje).first()
-        reviews = db.query(Resena).filter(Resena.id_viaje == viaje.id_viaje).all()
-        mi_resena = any(r.id_autor == usuario_id for r in reviews)
-        resenas_completas = (
-            any(r.tipo == "usuario_a_conductor" for r in reviews)
-            and any(r.tipo == "conductor_a_usuario" for r in reviews)
-        )
+        if mongo is not None:
+            reviews = review_service.get_reviews_by_trip(mongo, db, viaje.id_viaje)
+            mi_resena = any(r.get("id_autor") == usuario_id for r in reviews)
+            resenas_completas = (
+                any(r.get("tipo") == "usuario_a_conductor" for r in reviews)
+                and any(r.get("tipo") == "conductor_a_usuario" for r in reviews)
+            )
+        else:
+            reviews = db.query(Resena).filter(Resena.id_viaje == viaje.id_viaje).all()
+            mi_resena = any(r.id_autor == usuario_id for r in reviews)
+            resenas_completas = (
+                any(r.tipo == "usuario_a_conductor" for r in reviews)
+                and any(r.tipo == "conductor_a_usuario" for r in reviews)
+            )
 
         result.append({
             "viaje": viaje,

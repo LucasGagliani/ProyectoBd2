@@ -10,7 +10,7 @@ ALLOWED_PAYMENT_STATES = {"pendiente", "aprobado", "rechazado", "reembolsado"}
 
 class PaymentCreateRequest(BaseModel):
     id_viaje: int
-    monto_base: Decimal = Field(gt=0)
+    monto_base: Optional[Decimal] = Field(default=None, gt=0)
     tarifa_adicional: Decimal = Field(default=0)
     metodo_pago: str
     estado_transaccion: Optional[str] = "pendiente"
@@ -21,6 +21,13 @@ class PaymentCreateRequest(BaseModel):
         if not value.strip():
             raise ValueError("El método de pago no puede estar vacío")
         return value.strip()
+
+    @field_validator("tarifa_adicional")
+    @classmethod
+    def validate_tarifa_adicional(cls, value: Decimal) -> Decimal:
+        if value < 0:
+            raise ValueError("La tarifa adicional no puede ser negativa")
+        return value
 
     @field_validator("estado_transaccion")
     @classmethod

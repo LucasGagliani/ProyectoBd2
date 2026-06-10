@@ -10,6 +10,14 @@ from src.databases.schema import Pago
 
 ALLOWED_PAYMENT_STATES = {"pendiente", "aprobado", "rechazado", "reembolsado"}
 
+# Máquina de estados: transiciones permitidas
+VALID_STATE_TRANSITIONS = {
+    "pendiente": {"aprobado", "rechazado"},
+    "aprobado": {"reembolsado"},
+    "rechazado": {"pendiente"},  # Permitir reintentos
+    "reembolsado": set(),  # Estado final
+}
+
 
 def calculate_payment_total(monto_base: Decimal, tarifa_adicional: Decimal) -> Decimal:
     total = monto_base + tarifa_adicional
@@ -54,7 +62,17 @@ def create_payment(
 
 def update_payment_status(db: Session, payment: Pago, new_status: str) -> Pago:
     if new_status not in ALLOWED_PAYMENT_STATES:
-        raise ValueError("Estado de pago inválido")
+        raise ValueError(f"Estado de pago inválido: {new_status}")
+    
+    # Validar transición
+    current_state = payment.estado_transaccion
+    allowed_next_states = VALID_STATE_TRANSITIONS.get(current_state, set())
+    
+    if new_status not in allowed_next_states:
+        raise ValueError(
+            f"Transición inválida de pago: {current_state} → {new_status}. "
+            f"Estados permitidos: {', '.join(allowed_next_states) or 'ninguno (estado final)'}"
+        )
 
     payment.estado_transaccion = new_status
     if new_status != "pendiente":

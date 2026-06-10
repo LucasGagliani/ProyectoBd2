@@ -40,7 +40,7 @@ class Conductor(Base):
     longitud_actual = Column(DECIMAL(10, 7), nullable=True)
 
     usuario = relationship("Usuario", back_populates="conductor")
-    vehiculo = relationship("Vehiculo", back_populates="conductor", uselist=False)
+    vehiculos = relationship("Vehiculo", back_populates="conductor")
     viajes = relationship("Viaje", back_populates="conductor", foreign_keys="Viaje.id_conductor")
 
 
@@ -57,7 +57,7 @@ class Vehiculo(Base):
     tipo_vehiculo = Column(String(30), nullable=True)
     capacidad_pasajeros = Column(Integer, nullable=True)
 
-    conductor = relationship("Conductor", back_populates="vehiculo")
+    conductor = relationship("Conductor", back_populates="vehiculos")
 
 
 class Viaje(Base):
@@ -134,3 +134,18 @@ class UbicacionViaje(Base):
 
     viaje = relationship("Viaje", foreign_keys=[id_viaje])
     conductor = relationship("Conductor", foreign_keys=[id_conductor])
+
+
+class Notificacion(Base):
+    __tablename__ = "notificaciones"
+
+    id_notificacion = Column(Integer, primary_key=True, autoincrement=True)
+    id_usuario = Column(Integer, ForeignKey("usuarios.id_usuario"), nullable=False)
+    titulo = Column(String(255), nullable=False)
+    mensaje = Column(Text, nullable=False)
+    tipo = Column(String(50), nullable=False)  # viaje, pago, review, etc.
+    id_referencia = Column(Integer, nullable=True)  # ID del viaje, pago, etc.
+    leida = Column(Integer, nullable=False, default=0)  # 0=no leída, 1=leída
+    fecha_creacion = Column(TIMESTAMP, server_default=func.now())
+
+    usuario = relationship("Usuario", foreign_keys=[id_usuario])

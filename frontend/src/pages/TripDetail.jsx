@@ -4,6 +4,7 @@ import { getTrip, getTripStatus, updateTripStatus } from '../api/trips'
 import { updateLocation } from '../api/locations'
 import { useAuth } from '../context/AuthContext'
 import TripMap from '../components/TripMap'
+import { useGPS } from '../hooks/useGPS'
 
 const STATUS_LABELS = {
   pendiente: { label: 'Buscando conductor...', color: 'text-yellow-600 bg-yellow-50', dot: 'bg-yellow-400' },
@@ -31,6 +32,10 @@ export default function TripDetail() {
   const [error, setError] = useState('')
   const [updating, setUpdating] = useState(false)
   const intervalRef = useRef(null)
+  
+  // Rastrear posición GPS solo si es conductor y viaje está en curso
+  const isTrackingEnabled = role === 'conductor' && status === 'en_curso'
+  const { position: gpsPosition, error: gpsError, accuracy } = useGPS(parseInt(id), isTrackingEnabled)
 
   const fetchStatus = async () => {
     try {
@@ -96,11 +101,33 @@ export default function TripDetail() {
       <div className={`flex items-center gap-2 px-4 py-3 rounded-xl mb-6 ${st.color}`}>
         <span className={`w-2.5 h-2.5 rounded-full ${st.dot} animate-pulse`}></span>
         <span className="font-medium">{st.label}</span>
+        {isTrackingEnabled && gpsPosition && (
+          <span className="ml-auto text-xs font-normal">📍 GPS Activo</span>
+        )}
       </div>
+
+      {isTrackingEnabled && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+          <p className="text-sm font-medium text-blue-900 mb-2">📍 Rastreo de ubicación</p>
+          {gpsError ? (
+            <p className="text-xs text-red-600">{gpsError}</p>
+          ) : gpsPosition ? (
+            <div className="text-xs text-blue-700 space-y-1">
+              <p>Lat: {gpsPosition.latitude.toFixed(6)}</p>
+              <p>Lon: {gpsPosition.longitude.toFixed(6)}</p>
+              {accuracy && <p>Precisión: ±{Math.round(accuracy)}m</p>}
+              <p className="text-blue-600 font-medium">✓ Enviando ubicación al servidor</p>
+            </div>
+          ) : (
+            <p className="text-xs text-blue-600">Obteniendo ubicación...</p>
+          )}
+        </div>
+      )}
 
       <TripMap
         origin={{ lat: trip.latitud_inicio, lon: trip.longitud_inicio }}
         destination={{ lat: trip.latitud_destino, lon: trip.longitud_destino }}
+        currentPosition={isTrackingEnabled ? gpsPosition : null}
         className="mb-6"
       />
 

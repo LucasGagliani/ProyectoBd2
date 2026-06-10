@@ -1,12 +1,22 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getMe } from '../api/users'
+import { getTripHistory } from '../api/trips'
 
 export default function Dashboard() {
   const [user, setUser] = useState(null)
+  const [pendingPaymentTrip, setPendingPaymentTrip] = useState(null)
 
   useEffect(() => {
     getMe().then(({ data }) => setUser(data)).catch(() => {})
+    getTripHistory()
+      .then(({ data }) => {
+        const pendingTrip = data.find(
+          (trip) => trip.estado === 'finalizado' && !trip.estado_pago
+        )
+        setPendingPaymentTrip(pendingTrip || null)
+      })
+      .catch(() => {})
   }, [])
 
   return (
@@ -25,6 +35,21 @@ export default function Dashboard() {
         className="block w-full border text-center py-3 rounded-xl text-sm font-medium hover:bg-gray-50 mb-6">
         Ver historial de viajes
       </Link>
+
+      {pendingPaymentTrip && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-5 mb-6">
+          <p className="text-sm font-semibold text-yellow-800 mb-1">Tenes un viaje pendiente de pago</p>
+          <p className="text-sm text-yellow-700 mb-4">
+            Viaje #{pendingPaymentTrip.id_viaje} finalizado. Completa el pago para cerrar el viaje.
+          </p>
+          <Link
+            to={`/trips/${pendingPaymentTrip.id_viaje}/payment`}
+            className="inline-block bg-black text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800"
+          >
+            Ir a pagar
+          </Link>
+        </div>
+      )}
 
       {user && (
         <div className="bg-white border rounded-xl p-5">

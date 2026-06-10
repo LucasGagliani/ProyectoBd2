@@ -30,9 +30,20 @@ const ICON_DEST = L.divIcon({
   iconAnchor: [7, 7],
 })
 
-export default function TripMap({ origin, destination = null, className = '' }) {
+const ICON_CURRENT = L.divIcon({
+  className: '',
+  html: `<div style="
+    width:16px;height:16px;border-radius:50%;
+    background:#2563eb;border:3px solid white;
+    box-shadow:0 0 10px rgba(37,99,235,0.6)">
+  </div>`,
+  iconAnchor: [8, 8],
+})
+
+export default function TripMap({ origin, destination = null, currentPosition = null, className = '' }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
+  const currentMarkerRef = useRef(null)
 
   useEffect(() => {
     if (!containerRef.current || !origin) return
@@ -100,6 +111,22 @@ export default function TripMap({ origin, destination = null, className = '' }) 
       mapRef.current = null
     }
   }, [origin?.lat, origin?.lon, destination?.lat, destination?.lon])
+
+  // Actualizar posición actual en tiempo real
+  useEffect(() => {
+    if (!mapRef.current || !currentPosition) return
+
+    if (currentMarkerRef.current) {
+      currentMarkerRef.current.setLatLng([currentPosition.latitude, currentPosition.longitude])
+    } else {
+      currentMarkerRef.current = L.marker(
+        [currentPosition.latitude, currentPosition.longitude],
+        { icon: ICON_CURRENT }
+      )
+        .addTo(mapRef.current)
+        .bindPopup('<b>Tu ubicación actual</b>')
+    }
+  }, [currentPosition?.latitude, currentPosition?.longitude])
 
   return (
     <div

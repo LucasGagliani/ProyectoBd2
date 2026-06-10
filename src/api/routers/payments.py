@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from src.api.dependencies import get_db, get_current_user
 from src.databases.schema import Conductor, Pago, Viaje
 from src.models.payment import PaymentCreateRequest, PaymentResponse, PaymentStatusUpdate
-from src.services import payment_service
+from src.services import payment_service, trip_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -59,13 +59,18 @@ def create_payment(
             detail="Ya existe un pago registrado para este viaje.",
         )
 
+    monto_base = trip_service.estimate_trip_fare(
+        viaje.distancia_km,
+        viaje.tiempo_minutos,
+    )
+
     pago = payment_service.create_payment(
         db=db,
         viaje_id=data.id_viaje,
-        monto_base=data.monto_base,
+        monto_base=monto_base,
         tarifa_adicional=data.tarifa_adicional,
         metodo_pago=data.metodo_pago,
-        estado_transaccion=data.estado_transaccion,
+        estado_transaccion="aprobado",
     )
 
     logger.info(f"Pago creado: id_pago={pago.id_pago} viaje_id={pago.id_viaje}")
@@ -127,6 +132,8 @@ def update_payment_status(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    from src.services import notification_service
+    
     pago = payment_service.get_payment(db, payment_id)
     if pago is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pago no encontrado")
@@ -136,16 +143,47 @@ def update_payment_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Viaje no encontrado")
 
     conductor = db.query(Conductor).filter(Conductor.id_usuario == current_user.id_usuario).first()
+    
+    # Solo el conductor asignado puede confirmar pagos
+    # (el pasajero crea el pago inicial, pero el conductor lo aprueba/rechaza)
     if conductor is None or viaje.id_conductor != conductor.id_conductor:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo el conductor asignado puede confirmar el pago.",
+            detail="Solo el conductor asignado puede actualizar el estado del pago.",
+        )
+    
+    # Validación adicional: no permitir cambio si el pago ya está finalizado
+    if pago.estado_transaccion == "reembolsado":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede modificar un pago que ya ha sido reembolsado.",
         )
 
+    old_status = pago.estado_transaccion
     try:
         pago = payment_service.update_payment_status(db, pago, data.estado_transaccion)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
 
-    logger.info(f"Estado de pago actualizado: id_pago={pago.id_pago} -> {pago.estado_transaccion}")
+    # Crear notificación para el pasajero con el nuevo estado
+    try:
+        status_messages = {
+            "aprobado": "✓ Tu pago ha sido confirmado.",
+            "rechazado": "✗ Tu pago ha sido rechazado.",
+            "reembolsado": "💰 Reembolso procesado.",
+        }
+        mensaje = status_messages.get(data.estado_transaccion, f"Estado: {data.estado_transaccion}")
+        
+        notification_service.create_notification(
+            db=db,
+            id_usuario=viaje.id_usuario,
+            titulo="Cambio en estado de pago",
+            mensaje=mensaje,
+            tipo="pago",
+            id_referencia=pago.id_pago,
+        )
+    except Exception as e:
+        logger.warning(f"Error creating payment notification: {e}")
+
+    logger.info(f"Estado de pago actualizado: id_pago={pago.id_pago} {old_status}→{pago.estado_transaccion} (conductor={conductor.id_conductor})")
     return pago
