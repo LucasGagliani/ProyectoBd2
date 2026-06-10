@@ -168,30 +168,32 @@ def find_best_driver(
     """
     Estrategia de matching en dos pasos:
 
-    1. Neo4j — matching preferencial:
+    1. Matching por posición:
+       Asigna el conductor disponible más cercano geográficamente.
+
+    2. Neo4j — matching preferencial como fallback:
        Busca en el grafo de relaciones conductores con los que el usuario
        ya viajó antes y que estén disponibles ahora.
-       Si hay historial, prioriza al conductor con más viajes previos
-       (siempre que tenga posición registrada).
-
-    2. Fallback — matching por posición:
-       Si Neo4j no está disponible o el usuario no tiene historial,
-       asigna el conductor disponible más cercano geográficamente.
+       Si no se pudo resolver por ubicación, prioriza al conductor con
+       más viajes previos.
     """
     from src.services.neo4j_service import find_preferred_conductors
 
-    available_ids = [d.id_conductor for d in available_drivers]
+    # Paso 1: elegir el conductor más cercano por posición
+    nearest_driver = find_nearest_driver(db, redis_client, available_drivers, usuario_lat, usuario_lon)
+    if nearest_driver is not None:
+        return nearest_driver
 
-    # Paso 1: buscar conductores con historial en Neo4j
+    # Paso 2: fallback por historial en Neo4j
+    available_ids = [d.id_conductor for d in available_drivers]
     preferred_ids = find_preferred_conductors(neo4j_client, usuario_id, available_ids)
     if preferred_ids:
         for cid in preferred_ids:
             conductor = next((d for d in available_drivers if d.id_conductor == cid), None)
-            if conductor and conductor.latitud_actual is not None:
+            if conductor:
                 return conductor
 
-    # Paso 2: fallback al más cercano por posición
-    return find_nearest_driver(db, redis_client, available_drivers, usuario_lat, usuario_lon)
+    return None
 
 
 def assign_trip_to_driver(

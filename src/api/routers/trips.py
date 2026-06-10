@@ -155,6 +155,7 @@ def create_trip(
     - Usuario: pasajero que solicita el viaje
     - Sistema: busca conductores disponibles (estado='disponible', sin viajes activos)
     - Sistema: calcula distancia al usuario y asigna al más cercano
+    - Fallback: si no hay posiciones registradas, usa Neo4j para priorizar historial previo
     - Resultado: viaje con estado 'aceptado' y conductor asignado, o 'pendiente' sin conductor
     """
     # Validar que el usuario no tenga demasiadas solicitudes pendientes (opcional)
@@ -177,8 +178,8 @@ def create_trip(
     db.flush()  # Obtener el ID del viaje sin hacer commit aún
     
     # Buscar conductor disponible usando matching en dos pasos:
-    # 1. Neo4j: prioriza conductores con historial con este usuario
-    # 2. Fallback: conductor disponible más cercano por posición GPS
+    # 1. Ubicación: conductor disponible más cercano por posición GPS
+    # 2. Fallback Neo4j: prioriza conductores con historial con este usuario
     available_drivers = trip_service.find_available_drivers(db)
 
     if available_drivers:

@@ -12,69 +12,23 @@ const COORDS = {
   'Caballito': [-34.6186, -58.4403],
 }
 
-const AVERAGE_CITY_SPEED_KMH = 22
-
-function toRadians(value) {
-  return (value * Math.PI) / 180
-}
-
-function calculateDistanceKm(lat1, lon1, lat2, lon2) {
-  const earthRadiusKm = 6371
-  const dLat = toRadians(lat2 - lat1)
-  const dLon = toRadians(lon2 - lon1)
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRadians(lat1)) *
-      Math.cos(toRadians(lat2)) *
-      Math.sin(dLon / 2) ** 2
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  return earthRadiusKm * c
-}
-
-function estimateTripMetrics(origenCoords, destinoCoords) {
-  if (!origenCoords || !destinoCoords) {
-    return { distancia_km: '', tiempo_minutos: '' }
-  }
-
-  const [lat1, lon1] = origenCoords
-  const [lat2, lon2] = destinoCoords
-  const directDistance = calculateDistanceKm(lat1, lon1, lat2, lon2)
-  const urbanDistance = directDistance * 1.25
-  const tiempoMinutos = Math.max(5, Math.round((urbanDistance / AVERAGE_CITY_SPEED_KMH) * 60))
-
-  return {
-    distancia_km: urbanDistance.toFixed(1),
-    tiempo_minutos: String(tiempoMinutos),
-  }
-}
-
 export default function NewTrip() {
   const navigate = useNavigate()
   const [form, setForm] = useState({
     origen: '', destino: '',
     latitud_inicio: '', longitud_inicio: '',
     latitud_destino: '', longitud_destino: '',
-    distancia_km: '', tiempo_minutos: '',
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   const selectBarrio = (field, barrio) => {
     const [lat, lon] = COORDS[barrio]
-    setForm((current) => {
-      const nextForm = field === 'origen'
-        ? { ...current, origen: barrio, latitud_inicio: lat, longitud_inicio: lon }
-        : { ...current, destino: barrio, latitud_destino: lat, longitud_destino: lon }
-
-      const origenCoords = nextForm.origen ? COORDS[nextForm.origen] : null
-      const destinoCoords = nextForm.destino ? COORDS[nextForm.destino] : null
-
-      return {
-        ...nextForm,
-        ...estimateTripMetrics(origenCoords, destinoCoords),
-      }
-    })
+    if (field === 'origen') {
+      setForm(f => ({ ...f, origen: barrio, latitud_inicio: lat, longitud_inicio: lon }))
+    } else {
+      setForm(f => ({ ...f, destino: barrio, latitud_destino: lat, longitud_destino: lon }))
+    }
   }
 
   const handleSubmit = async (e) => {
@@ -91,8 +45,6 @@ export default function NewTrip() {
         longitud_inicio: parseFloat(form.longitud_inicio),
         latitud_destino: parseFloat(form.latitud_destino),
         longitud_destino: parseFloat(form.longitud_destino),
-        distancia_km: parseFloat(form.distancia_km),
-        tiempo_minutos: parseInt(form.tiempo_minutos),
       }
 
       const { data } = await createTrip(payload)
@@ -137,27 +89,6 @@ export default function NewTrip() {
           {form.destino && (
             <p className="text-xs text-gray-400 mt-2">{form.latitud_destino}, {form.longitud_destino}</p>
           )}
-        </div>
-
-        <div className="bg-white border rounded-xl p-5">
-          <label className="block font-medium mb-3">Estimacion del viaje</label>
-          <p className="text-sm text-gray-500 mb-4">
-            La distancia y el tiempo se calculan automaticamente al elegir origen y destino.
-          </p>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Distancia estimada</label>
-              <div className="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700">
-                {form.distancia_km ? `${form.distancia_km} km` : 'Selecciona un recorrido'}
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Tiempo estimado</label>
-              <div className="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700">
-                {form.tiempo_minutos ? `${form.tiempo_minutos} min` : 'Selecciona un recorrido'}
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Preview del recorrido cuando ambos puntos están seleccionados */}
